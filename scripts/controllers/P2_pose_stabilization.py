@@ -2,6 +2,9 @@ import numpy as np
 from utils import wrapToPi
 import rospy
 from std_msgs.msg import Float64
+#*** ADDED G.S. 10/31/20 **************************************************
+from PoseCtrlData.msg import PoseCtrlData
+#***************************************************************************
 
 # command zero velocities once we are this close to the goal
 RHO_THRES = 0.05
@@ -19,9 +22,13 @@ class PoseController:
         self.om_max = om_max
 
         #*** ADDED G.S. 10/28/20 **************************************************
-        self.alpha_pub = rospy.Publisher('/controller/alpha', Float64, queue_size=1)
-        self.delta_pub = rospy.Publisher('/controller/delta', Float64, queue_size=1)
-        self.rho_pub   = rospy.Publisher('/controller/rho', Float64, queue_size=1)
+        #self.alpha_pub = rospy.Publisher('/controller/alpha', Float64, queue_size=1)
+        #self.delta_pub = rospy.Publisher('/controller/delta', Float64, queue_size=1)
+        #self.rho_pub   = rospy.Publisher('/controller/rho', Float64, queue_size=1)
+        #***************************************************************************
+
+        #*** ADDED G.S. 10/31/20 **************************************************
+        self.pubctrlvars = rospy.Publisher('/controller/pose_ctrl_vars', PoseCtrlData, queue_size=1)
         #***************************************************************************
 
 
@@ -93,11 +100,21 @@ class PoseController:
             self.rho_pub.publish(rho_ros)
             rate.sleep() 
         """             
-        self.alpha_pub.publish(Float64(alpha))
-	self.delta_pub.publish(Float64(delta))
-	self.rho_pub.publish(Float64(rho))
-
+	# G.S. 10/28/20 *******************************
+        #self.alpha_pub.publish(Float64(alpha))
+	#self.delta_pub.publish(Float64(delta))
+	#self.rho_pub.publish(Float64(rho))
         #print('PUBLISHED alpha delta rho')
+	# *******************************************
+	# G.S. 10/31/20 *******************************
+        msg = PoseCtrlData()
+        msg.header.stamp = rospy.Time.now()
+        msg.alpha = Float64(alpha)
+        msg.delta = Float64(delta)
+        msg.rho = Float64(rho)
+        self.pubctrlvars.publish(msg)
+	# *********************************************
+
         ########## Code ends here ##########
 
         # apply control limits
