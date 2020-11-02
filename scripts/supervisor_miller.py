@@ -9,7 +9,8 @@ from geometry_msgs.msg import Twist, PoseArray, Pose2D, PoseStamped
 from std_msgs.msg import Float32MultiArray, String
 import tf
 
-import numpy as np 	# ************************** Added G.S. 10/19 ********************
+import numpy as np  # ************************** Added G.S. 10/19 ********************
+
 
 class Mode(Enum):
     """State machine modes. Feel free to change."""
@@ -53,7 +54,8 @@ class SupervisorParams:
             print("    rviz = {}".format(self.rviz))
             print("    mapping = {}".format(self.mapping))
             print("    pos_eps, theta_eps = {}, {}".format(self.pos_eps, self.theta_eps))
-            print("    stop_time, stop_min_dist, crossing_time = {}, {}, {}".format(self.stop_time, self.stop_min_dist, self.crossing_time))
+            print("    stop_time, stop_min_dist, crossing_time = {}, {}, {}".format(self.stop_time, self.stop_min_dist,
+                                                                                    self.crossing_time))
 
 
 class Supervisor:
@@ -73,14 +75,8 @@ class Supervisor:
         self.y_g = 0
         self.theta_g = 0
 
-	# Goal state
-        self.x_stop = 0
-        self.y_stop = 0
-        self.theta_stop = 0
-
         # Current mode
-        #self.mode = Mode.IDLE # change back if needed Mark
-	self.mode = Mode.NAV
+        self.mode = Mode.IDLE
         self.prev_mode = None  # For printing purposes
 
         ########## PUBLISHERS ##########
@@ -110,7 +106,7 @@ class Supervisor:
         else:
             self.x_g, self.y_g, self.theta_g = 1.5, -4., 0.
             self.mode = Mode.NAV
-
+        
 
     ########## SUBSCRIBER CALLBACKS ##########
 
@@ -204,17 +200,17 @@ class Supervisor:
 
     def init_stop_sign(self):
         """ initiates a stop sign maneuver """
-	#self.x_stop = self.x
-	#self.y_stop = self.y 
-	#self.theta_stop = self.theta        
-	# ******************************Added G.S. 10/19 *****************************
-	# get stop position
-	#self.x_g = self.x + self.params.stop_min_dist * np.cos( self.theta )
-	#self.y_g = self.y + self.params.stop_min_dist * np.sin( self.theta )
-	#self.theta_g = self.theta
-	#self.go_to_pose()
-	# **********************************************************************
-	self.stop_sign_start = rospy.get_rostime()
+        # self.x_stop = self.x
+        # self.y_stop = self.y
+        # self.theta_stop = self.theta
+        # ******************************Added G.S. 10/19 *****************************
+        # get stop position
+        self.x_g = self.x + self.params.stop_min_dist * np.cos(self.theta)
+        self.y_g = self.y + self.params.stop_min_dist * np.sin(self.theta)
+        self.theta_g = self.theta
+        self.go_to_pose()
+        # **********************************************************************
+        self.stop_sign_start = rospy.get_rostime()
         self.mode = Mode.STOP
 
     def has_stopped(self):
@@ -237,7 +233,6 @@ class Supervisor:
 
     ########## Code ends here ##########
 
-
     ########## STATE MACHINE LOOP ##########
 
     def loop(self):
@@ -248,7 +243,8 @@ class Supervisor:
         if not self.params.use_gazebo:
             try:
                 origin_frame = "/map" if mapping else "/odom"
-                translation, rotation = self.trans_listener.lookupTransform(origin_frame, '/base_footprint', rospy.Time(0))
+                translation, rotation = self.trans_listener.lookupTransform(origin_frame, '/base_footprint',
+                                                                            rospy.Time(0))
                 self.x, self.y = translation[0], translation[1]
                 self.theta = tf.transformations.euler_from_quaternion(rotation)[2]
             except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
@@ -265,10 +261,9 @@ class Supervisor:
 
         if self.mode == Mode.IDLE:
             # Send zero velocity
-            #to transition out of idle to get going
-            if self.prev_mode == None:
-                self.mode = Mode.NAV
-
+            # to transition out of idle to get going
+            if self.prev_mode == Mode.NAV:
+                self.mode = Mode.STOP
             # will stay in this state once entered unless first iter
             self.stay_idle()
 
@@ -280,19 +275,17 @@ class Supervisor:
                 self.go_to_pose()
 
         elif self.mode == Mode.STOP:
-            # At a stop sign            
-	    #self.stay_idle()
-	    nav_g_msg = Pose2D()
-#            nav_g_msg.x = self.x
-#            nav_g_msg.y = self.y
-#            nav_g_msg.theta = self.theta
-	    nav_g_msg.x = 999
+            # At a stop sign
+            # self.stay_idle()
+            nav_g_msg = Pose2D()
+            nav_g_msg.x = self.x
+            nav_g_msg.y = self.y
+            nav_g_msg.theta = self.theta
+
             self.pose_goal_publisher.publish(nav_g_msg)
 
-
             if self.has_stopped():
-                
-		self.init_crossing()
+                self.init_crossing()
 
 
         elif self.mode == Mode.CROSS:
@@ -300,7 +293,7 @@ class Supervisor:
             # Crossing an intersection stop sign only triggers transition to STOP mode if in NAV mode
             self.nav_to_pose()
             if self.has_crossed():
-                self.mode = Mode.NAV
+                self.mode = Mode.POSE
 
 
         elif self.mode == Mode.NAV:
@@ -315,10 +308,10 @@ class Supervisor:
         ############ Code ends here ############
 
     def run(self):
-        rate = rospy.Rate(10) # 10 Hz
+        rate = rospy.Rate(10)  # 10 Hz
         while not rospy.is_shutdown():
             self.loop()
-	    #print('running')
+            # print('running')
             rate.sleep()
 
 
