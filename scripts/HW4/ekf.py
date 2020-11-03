@@ -5,6 +5,9 @@ import numpy as np
 import scipy.linalg    # you may find scipy.linalg.block_diag useful
 import turtlebot_model as tb
 import pdb
+
+from HW4.maze_sim_parameters import NoiseParams
+
 class Ekf(object):
     """
     Base class for EKF Localization and SLAM.
@@ -27,6 +30,9 @@ class Ekf(object):
                  R: np.array[2,2] - control noise covariance (corresponding to dt = 1 second).
         """
         self.x = x0  # Gaussian belief mean
+        #self.x = x0 * 1.2  # Gaussian belief mean #************** CHANGED G.S. 11/02/20 ***
+        print("EKF initial mean = ",x0)
+        self.x[2] = 0.1
         self.Sigma = Sigma0  # Gaussian belief covariance
         self.R = R  # Control noise covariance (corresponding to dt = 1 second)
 
@@ -86,6 +92,12 @@ class Ekf(object):
         # TODO: Update self.x, self.Sigma.
         St = np.dot(H,np.dot(self.Sigma,H.T)) + Q
         Kt = np.dot(self.Sigma,np.dot(H.T,np.linalg.inv(St)))
+        #print("size of z = ",np.size(z) )
+        nz = len(z)
+        for i in range(nz/2) :
+            z[2*i] +=  np.random.normal(0.0,NoiseParams["std_alpha"])
+            z[2*i+1] += np.random.normal(0.0,NoiseParams["std_r"])
+
         self.x = self.x + np.dot(Kt,z)
         self.Sigma = self.Sigma - np.dot(Kt,np.dot(St,Kt.T))
 

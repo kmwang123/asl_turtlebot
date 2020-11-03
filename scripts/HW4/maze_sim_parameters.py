@@ -6,6 +6,7 @@ LineExtractionParams = {'MIN_SEG_LENGTH': 0.1,             # minimum length of e
                         'MAX_P2P_DIST': 0.4,               # max distance between two adjent pts within a segment
                         'MIN_POINTS_PER_SEGMENT': 3}       # minimum number of points per line segment
 
+
 NoiseParams = {'Sigma0': 0.01*np.eye(3),  # initial state covariance (x0 comes from ground truth; nonzero in case of timing mismatch)
                'R': 0.1*np.eye(2),    # control noise covariance (corresponding to dt = 1 second)
                'var_theta': 0.03,     # laser scan noise variance in theta measurement (per point)

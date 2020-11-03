@@ -3,7 +3,7 @@ from utils import wrapToPi
 import rospy
 from std_msgs.msg import Float64
 #*** ADDED G.S. 10/31/20 **************************************************
-from PoseCtrlData.msg import PoseCtrlData
+from section5.msg import PoseCtrlData
 #***************************************************************************
 
 # command zero velocities once we are this close to the goal
