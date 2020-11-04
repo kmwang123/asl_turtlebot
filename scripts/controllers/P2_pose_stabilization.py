@@ -109,9 +109,9 @@ class PoseController:
 	# G.S. 10/31/20 *******************************
         msg = PoseCtrlData()
         msg.header.stamp = rospy.Time.now()
-        msg.alpha = Float64(alpha)
-        msg.delta = Float64(delta)
-        msg.rho = Float64(rho)
+        msg.alpha = np.float64(alpha)
+        msg.delta = np.float64(delta)
+        msg.rho = np.float64(rho)
         self.pubctrlvars.publish(msg)
 	# *********************************************
 

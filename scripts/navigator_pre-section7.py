@@ -25,24 +25,6 @@ class Mode(Enum):
     TRACK = 2
     PARK = 3
 
-#*** NEW 11/04/2020 ******************
-class NavigatorParams:
-
-    def __init__(self, verbose=False):
-
-        # get v_max and om_max from my_nav.launch
-        self.v_max = rospy.get_param("~v_max", 0.2)
-        self.om_max = rospy.get_param("~om_max", 0.4)
-
-        if verbose:
-            #print("NavigatorParams:")
-            #print("    use_gazebo = {}".format(self.use_gazebo))
-            #print("    rviz = {}".format(self.rviz))
-            #print("    mapping = {}".format(self.mapping))
-            #print("    pos_eps, theta_eps = {}, {}".format(self.pos_eps, self.theta_eps))
-            #print("    stop_time, stop_min_dist, crossing_time = {}, {}, {}".format(self.stop_time, self.stop_min_dist, self.crossing_time))
-#***********************************
-
 class Navigator:
     """
     This node handles point to point turtlebot motion, avoiding obstacles.
@@ -50,11 +32,6 @@ class Navigator:
     """
     def __init__(self):
         rospy.init_node('turtlebot_navigator', anonymous=True)
-
-        #***NEW 11/04/2020 **********
-        self.params = NavigatorParams(verbose=True)
-        #****************************
-
         self.mode = Mode.IDLE
 
         # current state
@@ -88,12 +65,8 @@ class Navigator:
         self.plan_start = [0.,0.]
         
         # Robot limits
-        #*** NEW:should now be coming from NavigatorParams, use self.params *****
-        #self.v_max = 0.2    # maximum velocity
-        #self.om_max = 0.4   # maximum angular velocity
-        self.v_max = self.params.v_max    
-        self.om_max = self.params.om_max   
-        #**********************************************************************
+        self.v_max = 0.2    # maximum velocity
+        self.om_max = 0.4   # maximum angular velocity
 
         self.v_des = 0.12   # desired cruising velocity
         self.theta_start_thresh = 0.05   # threshold in theta to start moving forward when path-following
