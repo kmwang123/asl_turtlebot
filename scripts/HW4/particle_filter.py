@@ -61,8 +61,10 @@ class ParticleFilter(object):
         # Hint: You may find np.random.multivariate_normal useful.
 
 	# for each particle...
-        g = self.transition_model(u, dt)
-        self.x[0:3] = g[0:3]
+            
+            noise = np.random.multivariate_normal()
+            g = self.transition_model(u, dt) + noise
+            self.x[0:3] = g[0:3]
 
         ########## Code ends here ##########
 
