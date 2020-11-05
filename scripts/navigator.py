@@ -34,7 +34,7 @@ class NavigatorParams:
         self.v_max = rospy.get_param("~v_max", 0.2)
         self.om_max = rospy.get_param("~om_max", 0.4)
 
-        if verbose:
+        #if verbose:
             #print("NavigatorParams:")
             #print("    use_gazebo = {}".format(self.use_gazebo))
             #print("    rviz = {}".format(self.rviz))
