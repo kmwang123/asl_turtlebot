@@ -129,7 +129,8 @@ class ParticleFilter(object):
         i = 0
         c = ws[0]
         for m in range(self.M) :
-            u = np.sum(ws[0:m]) * (r + float(m)/float(M))
+            #u = np.sum(ws[0:m]) * (r + float(m)/float(M))
+            u = c * ( r + float(m)/float(M) )
             while c < u :
                 i += 1
                 c += ws[i]
@@ -206,13 +207,13 @@ class MonteCarloLocalization(ParticleFilter):
 
 
 
-        g = x0
+        g = 0.0 * self.xs
         for iter in range(self.M) :
-            x  = xvec[0]
-            y  = xvec[1]
-            th = xvec[2]
+            x  = self.xs[iter,0]
+            y  = self.xs[iter,1]
+            th = self.xs[iter,2]
             V  = us[iter,0] 
-            om = u[iter,1] 
+            om = us[iter,1] 
             #Compute new state g by integrating dynamics of x, y, theta
             #We assume that V, om are constant over dt
             #if abs(om) < EPSILON_OMEGA, assume theta is constant for calculating x, y
@@ -222,8 +223,8 @@ class MonteCarloLocalization(ParticleFilter):
                 g[iter,0] = x + (V/2.0)*(np.cos(th) + np.cos(g[iter,2]))*dt
                 g[iter,1] = y + (V/2.0)*(np.sin(th) + np.sin(g[iter,2]))*dt
             else:
-                g[iter,0] = x + (V/om)*(np.sin(g[2]) - np.sin(th)) 
-                g[iter,1] = y - (V/om)*(np.cos(g[2]) - np.cos(th))
+                g[iter,0] = x + (V/om)*(np.sin(g[iter,2]) - np.sin(th)) 
+                g[iter,1] = y - (V/om)*(np.cos(g[iter,2]) - np.cos(th))
 
         ########## Code ends here ##########
 
@@ -255,21 +256,19 @@ class MonteCarloLocalization(ParticleFilter):
 
 
         vs, Qt = self.measurement_model(z_raw, Q_raw)
-        detR = np.linalg.det(self.R)
         nz = z_raw.shape[0]
         K = len(vs)
 
         # FOR EACH PARTICLE
         # eta = 1.0 / sqrt( ( 2.0 * pi )^r * det( R ) )
         # ws = eta * exp( -0.5*(z - h(x))'*inv(Q)*(z - h(x)) )
-        eta = 1.0 / np.sqrt( ( 2.0 * np.pi )**nz * detR )
-        iter = 0
+        
         for iter in range(K/2) :
             vi = vs[2*iter:2*iter+1]
             Qi = Qt[2*iter:2*iter+1, 2*iter:2*iter+1]
-            ws[iter] = eta * np.exp(-0.5*( np.dot( np.dot( vi.transpose , np.inv(Qi) ), vi ) ) )
+            ws[iter] = scipy.stats.multivariate_normal.pdf( vi, np.zeros(nz), Qi )
 
-        # normalize weight    
+        # normalize weights    
         ws = ws / np.sum(ws)
         
         ########## Code ends here ##########
@@ -408,7 +407,7 @@ class MonteCarloLocalization(ParticleFilter):
         hs = np.zeros_like(self.map_lines)
         for j in range(self.map_lines.shape[1]):
 
-	    h = tb.transform_line_to_scanner_frame(self.map_line[:,j], self.x,self.tf_base_to_camera, compute_jacobian=False)
+	    h, Hx = tb.transform_line_to_scanner_frame(self.map_lines[:,j], self.x,self.tf_base_to_camera, compute_jacobian=False)
 
             h, Hx = tb.normalize_line_parameters(h, Hx)
             hs[:,j] = h

@@ -6,7 +6,8 @@ import scipy.linalg    # you may find scipy.linalg.block_diag useful
 import turtlebot_model as tb
 import pdb
 
-from HW4.maze_sim_parameters import NoiseParams
+#from HW4.maze_sim_parameters import NoiseParams
+from maze_sim_parameters import NoiseParams
 
 class Ekf(object):
     """
@@ -92,6 +93,8 @@ class Ekf(object):
         # TODO: Update self.x, self.Sigma.
         St = np.dot(H,np.dot(self.Sigma,H.T)) + Q
         Kt = np.dot(self.Sigma,np.dot(H.T,np.linalg.inv(St)))
+
+        # adding measurement noise
         #print("size of z = ",np.size(z) )
         nz = len(z)
         for i in range(nz/2) :
