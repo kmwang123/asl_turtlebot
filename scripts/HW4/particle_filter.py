@@ -60,11 +60,16 @@ class ParticleFilter(object):
         # Hint: Call self.transition_model().
         # Hint: You may find np.random.multivariate_normal useful.
 
-	# for each particle...
-            
-            noise = np.random.multivariate_normal()
-            g = self.transition_model(u, dt) + noise
-            self.x[0:3] = g[0:3]
+	us = np.zeros((self.u.shape[0],self.M))
+        for iter in range(self.M) :           
+            noise = np.random.multivariate_normal(np.zeros(self.u.shape[0]), self.R)
+            #g = self.transition_model(u + noise, dt)
+            us[iter,:] = u + noise
+           
+        # x_t = g(x_t-1,u)
+        self.xs = self.transition_model(us, dt)    
+        
+
 
         ########## Code ends here ##########
 
@@ -120,27 +125,19 @@ class ParticleFilter(object):
         #       without for loops. You may find np.linspace(), np.cumsum(), and
         #       np.searchsorted() useful. This results in a ~10x speedup.
 
-        """ MATLAB code
-        sumi = 0.0
-        endpts = zeros( np, 1 )
-        for iter2 = 1 : np
-            sumi = sumi + omega(iter2)
-            endpts(iter2) = sumi
-        # check that last endpoint (sum) is 1.0
 
-        for iter2 = 1 : np :
-            sj = rand()
-            
-            # find which bin sj is in
-            ind = 1
-            while ( sj > endpts(ind) ) :
-                ind = ind + 1
-                if ind > np:
-                    print("Warning: resampling error")
-                    break
-               
-            particles(iter2,:) = xbar(iter2,:)
-        """
+        i = 0
+        c = ws[0]
+        for m in range(self.M) :
+            u = np.sum(ws[0:m]) * (r + float(m)/float(M))
+            while c < u :
+                i += 1
+                c += ws[i]
+            self.ws[m] = ws[i]
+            self.xs[m] = xs[i]
+                    
+
+
         ########## Code ends here ##########
 
     def measurement_model(self, z_raw, Q_raw):
@@ -208,25 +205,25 @@ class MonteCarloLocalization(ParticleFilter):
         #       updates for them
 
 
-        # FOR EACH PARTICLE
 
-        x  = xvec[0]
-        y  = xvec[1]
-        th = xvec[2]
-        V  = u[0] 
-        om = u[1] 
-        #Compute new state g by integrating dynamics of x, y, theta
-        #We assume that V, om are constant over dt
-        g = np.zeros(3)
-        #if abs(om) < EPSILON_OMEGA, assume theta is constant for calculating x, y
-        #update om first
-        g[2] = th + om*dt
-        if abs(om) < EPSILON_OMEGA:
-           g[0] = x + (V/2.0)*(np.cos(th) + np.cos(g[2]))*dt
-           g[1] = y + (V/2.0)*(np.sin(th) + np.sin(g[2]))*dt
-        else:
-           g[0] = x + (V/om)*(np.sin(g[2]) - np.sin(th)) 
-           g[1] = y - (V/om)*(np.cos(g[2]) - np.cos(th))
+        g = x0
+        for iter in range(self.M) :
+            x  = xvec[0]
+            y  = xvec[1]
+            th = xvec[2]
+            V  = us[iter,0] 
+            om = u[iter,1] 
+            #Compute new state g by integrating dynamics of x, y, theta
+            #We assume that V, om are constant over dt
+            #if abs(om) < EPSILON_OMEGA, assume theta is constant for calculating x, y
+            #update om first
+            g[iter,2] = th + om*dt
+            if abs(om) < EPSILON_OMEGA:
+                g[iter,0] = x + (V/2.0)*(np.cos(th) + np.cos(g[iter,2]))*dt
+                g[iter,1] = y + (V/2.0)*(np.sin(th) + np.sin(g[iter,2]))*dt
+            else:
+                g[iter,0] = x + (V/om)*(np.sin(g[2]) - np.sin(th)) 
+                g[iter,1] = y - (V/om)*(np.cos(g[2]) - np.cos(th))
 
         ########## Code ends here ##########
 
@@ -256,13 +253,25 @@ class MonteCarloLocalization(ParticleFilter):
         # Hint: You'll need to call self.measurement_model()
 
 
-        # FOR EACH PARTICLE
 
         vs, Qt = self.measurement_model(z_raw, Q_raw)
+        detR = np.linalg.det(self.R)
+        nz = z_raw.shape[0]
+        K = len(vs)
 
+        # FOR EACH PARTICLE
         # eta = 1.0 / sqrt( ( 2.0 * pi )^r * det( R ) )
         # ws = eta * exp( -0.5*(z - h(x))'*inv(Q)*(z - h(x)) )
+        eta = 1.0 / np.sqrt( ( 2.0 * np.pi )**nz * detR )
+        iter = 0
+        for iter in range(K/2) :
+            vi = vs[2*iter:2*iter+1]
+            Qi = Qt[2*iter:2*iter+1, 2*iter:2*iter+1]
+            ws[iter] = eta * np.exp(-0.5*( np.dot( np.dot( vi.transpose , np.inv(Qi) ), vi ) ) )
 
+        # normalize weight    
+        ws = ws / np.sum(ws)
+        
         ########## Code ends here ##########
 
         self.resample(xs, ws)
@@ -289,6 +298,7 @@ class MonteCarloLocalization(ParticleFilter):
 
         K = len(vs)
         Q = Q_list[0]
+        z = np.array([item for items in vs for item in items])
         for i in range(1,K):
             Q = scipy.linalg.block_diag(Q,Q_list[i])
 
