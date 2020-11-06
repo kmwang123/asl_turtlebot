@@ -257,7 +257,7 @@ if __name__ == '__main__':
     #validate_mc_localization()
 
     ## Subcomponent validation
-    #validate_transition_model()
-    validate_predicted_measurements()
-    validate_compute_innovations()
+    validate_transition_model()
+    #validate_predicted_measurements()
+    #validate_compute_innovations()
     #validate_resample()
