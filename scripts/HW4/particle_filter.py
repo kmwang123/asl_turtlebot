@@ -133,7 +133,7 @@ class ParticleFilter(object):
             while c < u :
                 i += 1
                 c += ws[i]
-            self.ws[m] = ws[i]
+            self.ws[m] = 1.0/M
             self.xs[m] = xs[i]
                     
 
