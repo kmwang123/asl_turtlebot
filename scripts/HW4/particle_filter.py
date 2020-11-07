@@ -3,6 +3,8 @@ import scipy.linalg  # You may find scipy.linalg.block_diag useful
 import scipy.stats  # You may find scipy.stats.multivariate_normal.pdf useful
 import turtlebot_model as tb
 
+import pdb
+
 EPSILON_OMEGA = 1e-3
 
 class ParticleFilter(object):
@@ -60,9 +62,9 @@ class ParticleFilter(object):
         # Hint: Call self.transition_model().
         # Hint: You may find np.random.multivariate_normal useful.
 
-	us = np.zeros((self.u.shape[0],self.M))
+	us = np.zeros( (self.M, u.shape[0]) )
         for iter in range(self.M) :           
-            noise = np.random.multivariate_normal(np.zeros(self.u.shape[0]), self.R)
+            noise = np.random.multivariate_normal(np.zeros(u.shape[0]), self.R)
             #g = self.transition_model(u + noise, dt)
             us[iter,:] = u + noise
            
@@ -129,13 +131,16 @@ class ParticleFilter(object):
         i = 0
         c = ws[0]
         for m in range(self.M) :
-            #u = np.sum(ws[0:m]) * (r + float(m)/float(M))
-            u = c * ( r + float(m)/float(M) )
+            #u = np.sum(ws[0:m]) * (r + float(m)/float(self.M))
+            u = np.sum(ws) * (r + float(m)/float(self.M))
+            #u = c * ( r + float(m)/float(self.M) )
             while c < u :
                 i += 1
                 c += ws[i]
-            self.ws[m] = 1.0/M
-            self.xs[m] = xs[i]
+            #self.ws[m] = 1.0/float(self.M)
+            #self.ws[m] = ws[m]
+            self.ws[m] = ws[i]
+            self.xs[m,:] = xs[i,:]
                     
 
 
@@ -255,21 +260,29 @@ class MonteCarloLocalization(ParticleFilter):
 
 
 
-        vs, Qt = self.measurement_model(z_raw, Q_raw)
+        zs, Qt = self.measurement_model(z_raw, Q_raw) 
+	# vs is M x 2I, Q is 2I x 2I
+
         nz = z_raw.shape[0]
-        K = len(vs)
+        K = len(zs)
+	lenzi =  len(zs[0])
+	#print('lenzi=',lenzi )
+	#print(Qt)
+	#pdb.set_trace()
 
         # FOR EACH PARTICLE
         # eta = 1.0 / sqrt( ( 2.0 * pi )^r * det( R ) )
         # ws = eta * exp( -0.5*(z - h(x))'*inv(Q)*(z - h(x)) )
         
-        for iter in range(K/2) :
-            vi = vs[2*iter:2*iter+1]
-            Qi = Qt[2*iter:2*iter+1, 2*iter:2*iter+1]
-            ws[iter] = scipy.stats.multivariate_normal.pdf( vi, np.zeros(nz), Qi )
+        for iterM in range(self.M) :
+            #Qi = Qt[2*iter:2*iter+1, 2*iter:2*iter+1]
+            num = scipy.stats.multivariate_normal.pdf( zs[iterM,:], np.zeros( (lenzi) ), Qt )
+	    #print('num=',num)
+	    #pdb.set_trace()
+	    ws[iterM] = num
 
         # normalize weights    
-        ws = ws / np.sum(ws)
+        #ws = ws / np.sum(ws)
         
         ########## Code ends here ##########
 
@@ -289,17 +302,23 @@ class MonteCarloLocalization(ParticleFilter):
             z: np.array[M,2I]  - joint measurement mean for M particles.
             Q: np.array[2I,2I] - joint measurement covariance.
         """
-        vs = self.compute_innovations(z_raw, np.array(Q_raw))
+        vs = self.compute_innovations(z_raw, np.array(Q_raw)) 
+	# vs is M x 2I
 
         ########## Code starts here ##########
         # TODO: Compute Q.
         # Hint: You might find scipy.linalg.block_diag() useful
 
-        K = len(vs)
-        Q = Q_list[0]
-        z = np.array([item for items in vs for item in items])
-        for i in range(1,K):
-            Q = scipy.linalg.block_diag(Q,Q_list[i])
+        I = len(Q_raw)
+        #print('I=',I)
+        #print('size of vs is',np.shape(vs))
+        #print('size of Q_list is',len(Q_raw))
+        Q = Q_raw[0]
+        #z = np.array([item for items in vs for item in items])
+        #pdb.set_trace()
+        #for i in range(1,I):
+        for i in range(1,I):
+            Q = scipy.linalg.block_diag(Q,Q_raw[i])
 
         ########## Code ends here ##########
 
@@ -348,32 +367,39 @@ class MonteCarloLocalization(ParticleFilter):
         # Hint: For the faster solution, you might find np.expand_dims(), 
         #       np.linalg.solve(), np.meshgrid() useful.
 
-        hs, Hs = self.compute_predicted_measurements()
+        #hs, Hs = self.compute_predicted_measurements()
+        hs = self.compute_predicted_measurements()
 
         I = len(Q_raw) #number of lines extracted
-        J = len(hs[0,:]) #number of known map lines from camera frame
-        v_list = []
-        Q_list = []
-        H_list = []
-        for i in range(I):
-            #go through all known map lines in camera frames and compute Mahalanobis distance
-            dmin = None
-            vij_min = None
-            Q_min = None
-            H_min = None
-            for j in range(J):
-                vij = z_raw[:,i] - hs[:,j] #innovation 
-                #Sij = np.dot(np.dot(Hs[j],self.Sigma),Hs[j].T) + Q_raw[i]
-                dij = np.dot(np.dot(vij.T,np.linalg.inv(Q_raw[i])),vij)
-                if dmin is None or dij < dmin:
-                    dmin = dij
-                    vij_min = vij
-                    Q_min = Q_raw[i]
-                    H_min = Hs[j]
-            if dmin < self.g**2:
-                v_list.append(vij_min)
-                Q_list.append(Q_min)
-                H_list.append(H_min)
+        J = len(hs[0,0,:]) #number of known map lines from camera frame
+        vs = np.zeros( (self.M, I, 2) )
+        #Q_list = []
+        #H_list = []
+        for iterM in range(self.M) :
+	    for i in range(I):
+		#go through all known map lines in camera frames and compute Mahalanobis distance
+		dmin = None
+		vij_min = None
+		#Q_min = None
+		#H_min = None
+		for j in range(J):
+		    vij = z_raw[:,i] - hs[iterM,:,j] #innovation 
+		    #print("vij = ", vij)
+		    #Sij = np.dot(np.dot(Hs[j],self.Sigma),Hs[j].T) + Q_raw[i]
+                    #dij = np.dot(np.dot(vij.T,np.linalg.inv(Sij)),vij)
+		    #dij = np.dot( np.dot(vij.T,np.linalg.inv(Q_raw[i,:,:])), vij )
+		    dij = np.abs( np.dot( np.dot(vij.T,np.linalg.inv(Q_raw[i,:,:])), vij ) )
+		    #print("vij ,= ", vij, " dij = ",dij)
+		    if dmin is None or dij < dmin:
+		        dmin = dij
+		        vij_min = vij
+		        #Q_min = Q_raw[i]
+		        #H_min = Hs[j]
+		#if dmin < self.g**2:
+		vs[iterM,i,:] = vij_min
+		#pdb.set_trace()
+		#Q_list.append(Q_min)
+		#H_list.append(H_min)
 
         ########## Code ends here ##########
 
@@ -404,13 +430,28 @@ class MonteCarloLocalization(ParticleFilter):
         # Hint: For the faster solution, it does not call tb.transform_line_to_scanner_frame()
         #       or tb.normalize_line_parameters(), but reimplement these steps vectorized.
 
-        hs = np.zeros_like(self.map_lines)
-        for j in range(self.map_lines.shape[1]):
+        #hs = np.zeros_like(self.map_lines)
+        #for j in range(self.map_lines.shape[1]):
+	J = self.map_lines.shape[1]
+	hs = np.zeros( (self.M, 2, J) )
 
-	    h, Hx = tb.transform_line_to_scanner_frame(self.map_lines[:,j], self.x,self.tf_base_to_camera, compute_jacobian=False)
+	for iterM in range(self.M) :
+	    for iterJ in range(J) :
 
-            h, Hx = tb.normalize_line_parameters(h, Hx)
-            hs[:,j] = h
+	    	h = tb.transform_line_to_scanner_frame(self.map_lines[:,iterJ], self.xs[iterM],self.tf_base_to_camera, compute_jacobian=False)
+
+            	#h = tb.normalize_line_parameters(h, Hx=None)
+	    	alpha= h[0]
+	    	r = h[1]
+	    	if r < 0:
+		    alpha += np.pi
+		    r *= -1
+		#if Hx is not None:
+		#    Hx[1,:] *= -1
+	        alpha = (alpha + np.pi) % (2*np.pi) - np.pi
+	        h = np.array([alpha, r])
+
+                hs[iterM,:,iterJ] = h
 
         ########## Code ends here ##########
 

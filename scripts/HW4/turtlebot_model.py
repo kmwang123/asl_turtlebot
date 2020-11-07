@@ -80,7 +80,8 @@ def compute_dynamics(xvec, u, dt, compute_jacobians=True):
 
     return g, Gx, Gu
 
-def transform_line_to_scanner_frame(line, x, tf_base_to_camera, compute_jacobian=True):
+#def transform_line_to_scanner_frame(line, x, tf_base_to_camera, compute_jacobian=True):
+def transform_line_to_scanner_frame(line, x, tf_base_to_camera, compute_jacobian ):
     """
     Given a single map line in the world frame, outputs the line parameters
     in the scanner frame so it can be associated with the lines extracted
