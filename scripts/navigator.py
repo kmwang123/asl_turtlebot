@@ -3,6 +3,7 @@
 import rospy
 from nav_msgs.msg import OccupancyGrid, MapMetaData, Path
 from geometry_msgs.msg import Twist, Pose2D, PoseStamped
+from asl_turtlebot.msg import DetectedObject
 from std_msgs.msg import String
 import tf
 import numpy as np
@@ -18,30 +19,14 @@ from enum import Enum
 from dynamic_reconfigure.server import Server
 from asl_turtlebot.cfg import NavigatorConfig
 
+import pdb
+
 # state machine modes, not all implemented
 class Mode(Enum):
     IDLE = 0
     ALIGN = 1
     TRACK = 2
     PARK = 3
-
-#*** NEW 11/04/2020 ******************
-class NavigatorParams:
-
-    def __init__(self, verbose=False):
-
-        # get v_max and om_max from my_nav.launch
-        self.v_max = rospy.get_param("~v_max", 0.2)
-        self.om_max = rospy.get_param("~om_max", 0.4)
-
-        #if verbose:
-            #print("NavigatorParams:")
-            #print("    use_gazebo = {}".format(self.use_gazebo))
-            #print("    rviz = {}".format(self.rviz))
-            #print("    mapping = {}".format(self.mapping))
-            #print("    pos_eps, theta_eps = {}, {}".format(self.pos_eps, self.theta_eps))
-            #print("    stop_time, stop_min_dist, crossing_time = {}, {}, {}".format(self.stop_time, self.stop_min_dist, self.crossing_time))
-#***********************************
 
 class Navigator:
     """
@@ -50,11 +35,6 @@ class Navigator:
     """
     def __init__(self):
         rospy.init_node('turtlebot_navigator', anonymous=True)
-
-        #***NEW 11/04/2020 **********
-        self.params = NavigatorParams(verbose=True)
-        #****************************
-
         self.mode = Mode.IDLE
 
         # current state
@@ -68,6 +48,9 @@ class Navigator:
         self.theta_g = None
 
         self.th_init = 0.0
+
+        #dictionary to hold  locations of food items
+        self.food_locations = {}
 
         # map parameters
         self.map_width = 0
@@ -88,14 +71,8 @@ class Navigator:
         self.plan_start = [0.,0.]
         
         # Robot limits
-        #*** NEW:should now be coming from NavigatorParams, use self.params *****
-        #self.v_max = 0.2    # maximum velocity
-        #self.om_max = 0.4   # maximum angular velocity
-        self.v_max = self.params.v_max    
-        self.om_max = self.params.om_max  
-        print(self.v_max)
-        print(self.om_max) 
-        #**********************************************************************
+        self.v_max = 0.2    # maximum velocity
+        self.om_max = 0.4   # maximum angular velocity
 
         self.v_des = 0.12   # desired cruising velocity
         self.theta_start_thresh = 0.05   # threshold in theta to start moving forward when path-following
@@ -136,14 +113,27 @@ class Navigator:
         rospy.Subscriber('/map_metadata', MapMetaData, self.map_md_callback)
         rospy.Subscriber('/cmd_nav', Pose2D, self.cmd_nav_callback)
 
+        #Karen Added
+        rospy.Subscriber('/detector/donut', DetectedObject, self.object_callback)
         print "finished init"
-        
+
+    def object_callback(self, data):
+        #when an  object is detected, we compute the location of the object and store it as a dictionary
+        NAME  = data.name
+        dist  = data.distance
+        th_diff = 0.5*(data.thetaleft - data.thetaright)
+        th_center = data.thetaleft -  th_diff
+        food_loc_x  = self.x + dist*np.cos(th_center)
+        food_loc_y  = self.y + dist*np.sin(th_center)
+        LOCATIONS  =  (food_loc_x,food_loc_y)
+        #compute  location of food detected
+        self.food_locations[NAME] = LOCATIONS
+    
     def dyn_cfg_callback(self, config, level):
-        rospy.loginfo("Reconfigure Request: k1:{k1}, k2:{k2}, k3:{k3}, v_des:{v_des}".format(**config))
+        rospy.loginfo("Reconfigure Request: k1:{k1}, k2:{k2}, k3:{k3}".format(**config))
         self.pose_controller.k1 = config["k1"]
         self.pose_controller.k2 = config["k2"]
         self.pose_controller.k3 = config["k3"]
-        self.v_des = config["v_des"]
         return config
 
     def cmd_nav_callback(self, data):
@@ -326,7 +316,7 @@ class Navigator:
         
 
         # Check whether path is too short
-        if len(planned_path) < 4:
+        if len(planned_path) < 2:
             rospy.loginfo("Path too short to track")
             self.switch_mode(Mode.PARK)
             return
