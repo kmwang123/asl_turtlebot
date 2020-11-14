@@ -72,6 +72,7 @@ class PoseControllerNode:
         ########## Code starts here ##########
         # TODO: Create a subscriber to the '/cmd_pose' topic that receives
         #       Pose2D messages and calls cmd_pose_callback.
+<<<<<<< HEAD
 
 	#def subscriber():
 	#    rospy.init_node('cmd_pose_subscriber',anonymous=True)
@@ -79,6 +80,9 @@ class PoseControllerNode:
 	 #   rospy.spin()
 
 
+=======
+        self.sub = rospy.Subscriber('/cmd_pose', Pose2D, self.cmd_pose_callback)
+>>>>>>> 7986b334af6aaf916bf353b685c23e47d765e602
         ########## Code ends here ##########
 
 
@@ -97,10 +101,14 @@ class PoseControllerNode:
     def cmd_pose_callback(self, msg):
         ########## Code starts here ##########
         # TODO: Update the goal pose in the pose controller.
+<<<<<<< HEAD
 
 	self.controller.load_goal( msg.x, msg.y, msg.theta )
 
 
+=======
+        self.controller.load_goal(msg.x,msg.y,msg.theta)
+>>>>>>> 7986b334af6aaf916bf353b685c23e47d765e602
         ########## Code ends here ##########
 
         # Record time of pose update
@@ -130,6 +138,7 @@ class PoseControllerNode:
         ######### YOUR CODE HERE ############
         # TODO: Use your pose controller to compute controls (V, om) given the
         #       robot's current state.
+<<<<<<< HEAD
 	
 	#if self.controller.x_g == 999:
 #		V = 0
@@ -139,6 +148,9 @@ class PoseControllerNode:
 	#V = 0.2
 	#om = 0.0      
 	print('pose ctrl V om', V, om)
+=======
+        V, om = self.controller.compute_control(self.x,self.y,self.theta,rospy.get_rostime().to_sec())
+>>>>>>> 7986b334af6aaf916bf353b685c23e47d765e602
         ######### END OF YOUR CODE ##########
 
         cmd = Twist()

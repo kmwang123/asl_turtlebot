@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+#Karen May Wang (kmwang14@stanford.edu)
+#10/29/20
+
 from enum import Enum
 
 import rospy
@@ -72,7 +75,7 @@ class Supervisor:
         self.theta_g = 0
 
         # Current mode
-        self.mode = Mode.IDLE
+        self.mode = Mode.NAV #Mode.IDLE
         self.prev_mode = None  # For printing purposes
 
         ########## PUBLISHERS ##########
@@ -230,7 +233,7 @@ class Supervisor:
 
         if not self.params.use_gazebo:
             try:
-                origin_frame = "/map" if mapping else "/odom"
+                origin_frame = "/map" if self.params.mapping else "/odom"
                 translation, rotation = self.trans_listener.lookupTransform(origin_frame, '/base_footprint', rospy.Time(0))
                 self.x, self.y = translation[0], translation[1]
                 self.theta = tf.transformations.euler_from_quaternion(rotation)[2]
@@ -247,6 +250,9 @@ class Supervisor:
         #       at the stop sign.
 
         if self.mode == Mode.IDLE:
+            #to transition out of idle to get going
+            if self.prev_mode == None:
+                self.mode = Mode.NAV
             # Send zero velocity
             self.stay_idle()
 
@@ -259,11 +265,19 @@ class Supervisor:
 
         elif self.mode == Mode.STOP:
             # At a stop sign
-            self.nav_to_pose()
-
+            while True:
+                self.stay_idle()
+                if self.has_stopped():
+                    self.init_crossing()
+                    break
+             
         elif self.mode == Mode.CROSS:
             # Crossing an intersection
-            self.nav_to_pose()
+            while True:
+                self.go_to_pose()
+                if self.has_crossed():
+                    self.mode = Mode.NAV
+                    break
 
         elif self.mode == Mode.NAV:
             if self.close_to(self.x_g, self.y_g, self.theta_g):

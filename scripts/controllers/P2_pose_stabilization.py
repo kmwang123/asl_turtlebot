@@ -2,9 +2,12 @@ import numpy as np
 from utils import wrapToPi
 import rospy
 from std_msgs.msg import Float64
+<<<<<<< HEAD
 #*** ADDED G.S. 10/31/20 **************************************************
 from PoseCtrlData.msg import PoseCtrlData
 #***************************************************************************
+=======
+>>>>>>> 7986b334af6aaf916bf353b685c23e47d765e602
 
 # command zero velocities once we are this close to the goal
 RHO_THRES = 0.05
@@ -22,6 +25,7 @@ class PoseController:
         self.om_max = om_max
 
         #*** ADDED G.S. 10/28/20 **************************************************
+<<<<<<< HEAD
         #self.alpha_pub = rospy.Publisher('/controller/alpha', Float64, queue_size=1)
         #self.delta_pub = rospy.Publisher('/controller/delta', Float64, queue_size=1)
         #self.rho_pub   = rospy.Publisher('/controller/rho', Float64, queue_size=1)
@@ -29,6 +33,11 @@ class PoseController:
 
         #*** ADDED G.S. 10/31/20 **************************************************
         self.pubctrlvars = rospy.Publisher('/controller/pose_ctrl_vars', PoseCtrlData, queue_size=1)
+=======
+        self.alpha_pub = rospy.Publisher('/controller/alpha', Float64, queue_size=1)
+        self.delta_pub = rospy.Publisher('/controller/delta', Float64, queue_size=1)
+        self.rho_pub   = rospy.Publisher('/controller/rho', Float64, queue_size=1)
+>>>>>>> 7986b334af6aaf916bf353b685c23e47d765e602
         #***************************************************************************
 
 
@@ -100,6 +109,7 @@ class PoseController:
             self.rho_pub.publish(rho_ros)
             rate.sleep() 
         """             
+<<<<<<< HEAD
 	# G.S. 10/28/20 *******************************
         #self.alpha_pub.publish(Float64(alpha))
 	#self.delta_pub.publish(Float64(delta))
@@ -115,6 +125,13 @@ class PoseController:
         self.pubctrlvars.publish(msg)
 	# *********************************************
 
+=======
+        self.alpha_pub.publish(Float64(alpha))
+	self.delta_pub.publish(Float64(delta))
+	self.rho_pub.publish(Float64(rho))
+
+        #print('PUBLISHED alpha delta rho')
+>>>>>>> 7986b334af6aaf916bf353b685c23e47d765e602
         ########## Code ends here ##########
 
         # apply control limits
