@@ -323,7 +323,7 @@ class Navigator:
 	    # **** Added GS 11/13/2020 *************************
 	    if self.at_goal():
 		print('Already at goal - seclect another goal')
-		pdb.set_trace()
+		#pdb.set_trace()
 		self.switch_mode(Mode.IDLE)
 		return
             if self.mode != Mode.PARK:
@@ -422,7 +422,8 @@ class Navigator:
                     self.theta_g = None
                     self.switch_mode(Mode.IDLE)
 
-	    if self.x_g is None :  # Added GS 11/13/2020 ******************
+	    # Added GS 11/13/2020 ******************
+	    if self.x_g is None :  
 		print('Warning: goal undefined')
 
 	    if self.pose_controller.x_g is None :

@@ -259,6 +259,8 @@ class AStar(object):
         self.cost_to_arrive[ self.x_init ] = 0
         self.est_cost_through[ self.x_init ] = self.distance( self.x_init, self.x_goal )
 
+	iters = 0
+
         while ( len( self.open_set ) > 0 ) :
 
             # get the member of open_set with the lowest cost and assign to x_cur
@@ -299,9 +301,9 @@ class AStar(object):
 
                     temp_cost_to_arrive = self.cost_to_arrive[ x_cur ] + self.distance( x_cur, x_nbr )
 
-#                    if x_nbr not in self.open_set :
+                    if x_nbr not in self.open_set : # ** Changed 11/14/2020
 
-#                        self.open_set.add( x_nbr )
+                        self.open_set.add( x_nbr )
 
 #                    else :
 
@@ -311,7 +313,8 @@ class AStar(object):
 
                     cost_to_arrive_x_nbr = self.cost_to_arrive[ x_nbr ]
 
-                    if temp_cost_to_arrive <= cost_to_arrive_x_nbr :
+                    if temp_cost_to_arrive <= cost_to_arrive_x_nbr : 
+                    #if temp_cost_to_arrive <= cost_to_arrive_x_nbr or x_nbr not in self.open_set:# *** Changed 11/14/2020
 
                         # store the previous vertex for x_nbr
 
@@ -325,9 +328,9 @@ class AStar(object):
 
                         self.est_cost_through[ x_nbr ] = self.cost_to_arrive[ x_nbr ] + self.distance( x_nbr, self.x_goal )
 
-                        if x_nbr not in self.open_set :
+                        #if x_nbr not in self.open_set :
 
-                            self.open_set.add( x_nbr )
+                            #self.open_set.add( x_nbr )
 
 
                         # end if temp_cost_to_arrive...
@@ -337,6 +340,11 @@ class AStar(object):
                 # end if x_nbr in C
 
             # end if x_nbr in neighbors
+
+	    iters += 1
+	    if iters > 1000 :
+		print('Error in path planner - max its exceeded')
+		#break
 
         # end while len( open_set ) > 0
 

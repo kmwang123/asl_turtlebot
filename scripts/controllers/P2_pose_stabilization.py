@@ -33,6 +33,13 @@ class PoseController:
         self.pubctrlvars = rospy.Publisher('/controller/pose_ctrl_vars', PoseCtrlData, queue_size=1)
         #***************************************************************************
 
+        #*** ADDED G.S. 11/14/20 **************************************************
+        # goal state
+        self.x_g = None
+        self.y_g = None
+        self.theta_g = None
+        #***************************************************************************
+
 
     def load_goal(self, x_g, y_g, th_g):
         """ Loads in a new goal position """
