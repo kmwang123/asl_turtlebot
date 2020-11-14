@@ -31,7 +31,7 @@ class PoseControllerParams:
         self.om_max = rospy.get_param("~om_max", 1.)
 
         # Tells the robot to stay still if it doesn't get messages for TIMEOUT seconds.
-        self.timeout = rospy.get_param("~timeout", 1.)
+        self.timeout = rospy.get_param("~timeout", 10.)
 
         if verbose:
             print("PoseControllerParams:")
@@ -73,6 +73,12 @@ class PoseControllerNode:
         # TODO: Create a subscriber to the '/cmd_pose' topic that receives
         #       Pose2D messages and calls cmd_pose_callback.
 
+	#def subscriber():
+	#    rospy.init_node('cmd_pose_subscriber',anonymous=True)
+	rospy.Subscriber("/cmd_pose",Pose2D,self.cmd_pose_callback)
+	 #   rospy.spin()
+
+
         ########## Code ends here ##########
 
 
@@ -91,6 +97,9 @@ class PoseControllerNode:
     def cmd_pose_callback(self, msg):
         ########## Code starts here ##########
         # TODO: Update the goal pose in the pose controller.
+
+	self.controller.load_goal( msg.x, msg.y, msg.theta )
+
 
         ########## Code ends here ##########
 
@@ -121,7 +130,15 @@ class PoseControllerNode:
         ######### YOUR CODE HERE ############
         # TODO: Use your pose controller to compute controls (V, om) given the
         #       robot's current state.
-
+	
+	#if self.controller.x_g == 999:
+#		V = 0
+#		om = 0
+	#else:
+        V, om = self.controller.compute_control( self.x, self.y, self.theta, 0. )
+	#V = 0.2
+	#om = 0.0      
+	print('pose ctrl V om', V, om)
         ######### END OF YOUR CODE ##########
 
         cmd = Twist()
