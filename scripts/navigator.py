@@ -302,6 +302,7 @@ class Navigator:
         x_goal = self.snap_to_grid((self.x_g, self.y_g))
 
 	print('x_goal ',x_goal)
+        print('Calling A*')
 
         problem = AStar(state_min,state_max,x_init,x_goal,self.occupancy,self.plan_resolution)
 
@@ -380,6 +381,8 @@ class Navigator:
                 self.switch_mode(Mode.IDLE)
                 print e
                 pass
+
+	    print('Mode = ',self.mode)
 
             # STATE MACHINE LOGIC
             # some transitions handled by callbacks
