@@ -320,7 +320,15 @@ class Navigator:
         #if len(planned_path) < 2:  #*** Karens change **
         if len(planned_path) < 4: 
             rospy.loginfo("Path too short to track")
-            self.switch_mode(Mode.PARK)
+	    # **** Added GS 11/13/2020 *************************
+	    if self.at_goal():
+		print('Already at goal - seclect another goal')
+		pdb.set_trace()
+		self.switch_mode(Mode.IDLE)
+		return
+            if self.mode != Mode.PARK:
+	    # *************************************************
+		self.switch_mode(Mode.PARK)
             return
 
         # Smooth and generate a trajectory
@@ -402,6 +410,8 @@ class Navigator:
                     rospy.loginfo("replanning because out of time")
                     self.replan() # we aren't near the goal but we thought we should have been, so replan
             elif self.mode == Mode.PARK:
+		print('Goal state for PARK: ', self.x_g,self.y_g)
+		#pdb.set_trace()
                 if self.at_goal():
                     # forget about goal:
 
@@ -412,6 +422,12 @@ class Navigator:
                     self.theta_g = None
                     self.switch_mode(Mode.IDLE)
 
+	    if self.x_g is None :  # Added GS 11/13/2020 ******************
+		print('Warning: goal undefined')
+
+	    if self.pose_controller.x_g is None :
+		self.pose_controller.load_goal(self.x_g, self.y_g, self.theta_g)
+		# ************************************************************
             self.publish_control()
             rate.sleep()
 

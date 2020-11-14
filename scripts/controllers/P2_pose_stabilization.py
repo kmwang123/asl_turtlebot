@@ -6,6 +6,8 @@ from std_msgs.msg import Float64
 from section5.msg import PoseCtrlData
 #***************************************************************************
 
+import pdb
+
 # command zero velocities once we are this close to the goal
 RHO_THRES = 0.05
 ALPHA_THRES = 0.1
