@@ -92,6 +92,7 @@ class PoseController:
 
         #print(' V = ', V )
         #print(' om = ', om )
+	#print('Pose Controller Gains: ',self.k1,self.k2,self.k3)
         """
         #Publishing our computed alpha, delta, and rho values for navigation
         self.alpha_pub = rospy.Publisher('controller/alpha', Float64, queue_size=1)
