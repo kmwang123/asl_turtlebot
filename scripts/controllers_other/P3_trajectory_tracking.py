@@ -1,6 +1,3 @@
-# Karen May Wang (kmwang14@stanford.edu)
-# AA274A
-# 10/29/2020
 import numpy as np
 from numpy import linalg
 
@@ -45,7 +42,6 @@ class TrajectoryTracker:
         yd_d = np.interp(t,self.traj_times,self.traj[:,4])
         xdd_d = np.interp(t,self.traj_times,self.traj[:,5])
         ydd_d = np.interp(t,self.traj_times,self.traj[:,6])
-
         
         return x_d, xd_d, xdd_d, y_d, yd_d, ydd_d
 
@@ -54,7 +50,7 @@ class TrajectoryTracker:
         Inputs:
             x,y,th: Current state
             t: Current time
-        Outputs:
+        Outputs: 
             V, om: Control actions
         """
 
@@ -62,18 +58,6 @@ class TrajectoryTracker:
         x_d, xd_d, xdd_d, y_d, yd_d, ydd_d = self.get_desired_state(t)
 
         ########## Code starts here ##########
-        #reset to nominal velocity if velocity drops below the threshold
-        if np.abs(self.V_prev) < V_PREV_THRES:
-            NOMINAL_VELOCITY = np.sqrt(xd_d**2 + yd_d**2)
-            self.V_prev = NOMINAL_VELOCITY
-        #virtual control law
-        xd = self.V_prev*np.cos(th)
-        yd = self.V_prev*np.sin(th)
-        u1 = xdd_d + self.kpx*(x_d - x) + self.kdx*(xd_d - xd)
-        u2 = ydd_d + self.kpy*(y_d - y) + self.kdy*(yd_d - yd)
-        a  = np.cos(th)*u1 + np.sin(th)*u2
-        om = -(np.sin(th)/self.V_prev)*u1 + (np.cos(th)/self.V_prev)*u2
-        V = self.V_prev + a*dt
         #V = 0
         #om = 0
         

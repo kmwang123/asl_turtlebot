@@ -3,7 +3,6 @@
 import rospy
 from nav_msgs.msg import OccupancyGrid, MapMetaData, Path
 from geometry_msgs.msg import Twist, Pose2D, PoseStamped
-from asl_turtlebot.msg import DetectedObject
 from std_msgs.msg import String
 import tf
 import numpy as np
@@ -15,12 +14,9 @@ import scipy.interpolate
 import matplotlib.pyplot as plt
 from controllers import PoseController, TrajectoryTracker, HeadingController
 from enum import Enum
-from visualization_msgs.msg import Marker
 
 from dynamic_reconfigure.server import Server
 from asl_turtlebot.cfg import NavigatorConfig
-
-import pdb
 
 # state machine modes, not all implemented
 class Mode(Enum):
@@ -29,6 +25,24 @@ class Mode(Enum):
     TRACK = 2
     PARK = 3
 
+#*** NEW 11/04/2020 ******************
+class NavigatorParams:
+
+    def __init__(self, verbose=False):
+
+        # get v_max and om_max from my_nav.launch
+        self.v_max = rospy.get_param("~v_max", 0.2)
+        self.om_max = rospy.get_param("~om_max", 0.4)
+
+        #if verbose:
+            #print("NavigatorParams:")
+            #print("    use_gazebo = {}".format(self.use_gazebo))
+            #print("    rviz = {}".format(self.rviz))
+            #print("    mapping = {}".format(self.mapping))
+            #print("    pos_eps, theta_eps = {}, {}".format(self.pos_eps, self.theta_eps))
+            #print("    stop_time, stop_min_dist, crossing_time = {}, {}, {}".format(self.stop_time, self.stop_min_dist, self.crossing_time))
+#***********************************
+
 class Navigator:
     """
     This node handles point to point turtlebot motion, avoiding obstacles.
@@ -36,10 +50,12 @@ class Navigator:
     """
     def __init__(self):
         rospy.init_node('turtlebot_navigator', anonymous=True)
-        self.mode = Mode.IDLE
 
-        self.delivery_req_list = []
-        self.ifdelivery  = False
+        #***NEW 11/04/2020 **********
+        self.params = NavigatorParams(verbose=True)
+        #****************************
+
+        self.mode = Mode.IDLE
 
         # current state
         self.x = 0.0
@@ -63,8 +79,8 @@ class Navigator:
         self.occupancy_updated = False
 
         # plan parameters
-        self.plan_resolution =  0.1/6
-        self.plan_horizon = 3.5
+        self.plan_resolution =  0.1
+        self.plan_horizon = 15
 
         # time when we started following the plan
         self.current_plan_start_time = rospy.get_rostime()
@@ -72,8 +88,14 @@ class Navigator:
         self.plan_start = [0.,0.]
         
         # Robot limits
-        self.v_max = 0.5    # maximum velocity (orig is 0.2)
-        self.om_max = 1.0   # maximum angular velocity (orig is 0.4)
+        #*** NEW:should now be coming from NavigatorParams, use self.params *****
+        #self.v_max = 0.2    # maximum velocity
+        #self.om_max = 0.4   # maximum angular velocity
+        self.v_max = self.params.v_max    
+        self.om_max = self.params.om_max  
+        print(self.v_max)
+        print(self.om_max) 
+        #**********************************************************************
 
         self.v_des = 0.12   # desired cruising velocity
         self.theta_start_thresh = 0.05   # threshold in theta to start moving forward when path-following
@@ -89,21 +111,16 @@ class Navigator:
         self.traj_dt = 0.1
 
         # trajectory tracking controller parameters
-        self.kpx = 2.0 #orig was 0.5
-        self.kpy = 2.0 #orig was 0.5
-        self.kdx = 2.0 #orig was 1.5
-        self.kdy = 2.0 #orig was 1.5
-
-        # pose controller parameters
-        self.k1 = 1.0
-        self.k2 = 1.0
-        self.k3 = 1.0
+        self.kpx = 0.5
+        self.kpy = 0.5
+        self.kdx = 1.5
+        self.kdy = 1.5
 
         # heading controller parameters
         self.kp_th = 2.
 
         self.traj_controller = TrajectoryTracker(self.kpx, self.kpy, self.kdx, self.kdy, self.v_max, self.om_max)
-        self.pose_controller = PoseController(self.k1, self.k2, self.k3, self.v_max, self.om_max)
+        self.pose_controller = PoseController(0., 0., 0., self.v_max, self.om_max)
         self.heading_controller = HeadingController(self.kp_th, self.om_max)
 
         self.nav_planned_path_pub = rospy.Publisher('/planned_path', Path, queue_size=10)
@@ -113,28 +130,20 @@ class Navigator:
 
         self.trans_listener = tf.TransformListener()
 
-        #self.cfg_srv = Server(NavigatorConfig, self.dyn_cfg_callback)
+        self.cfg_srv = Server(NavigatorConfig, self.dyn_cfg_callback)
 
         rospy.Subscriber('/map', OccupancyGrid, self.map_callback)
         rospy.Subscriber('/map_metadata', MapMetaData, self.map_md_callback)
         rospy.Subscriber('/cmd_nav', Pose2D, self.cmd_nav_callback)
-        rospy.Subscriber('/delivery_request',  String, self.delivery_callback)
-    
-    def delivery_callback(self, msg):
-        self.delivery_req_list.append(msg)
-        if msg in self.delivery_req_list:
-              self.ifdelivery = True
-        elif msg in ['waypoint1']:
-              self.x_g = 3.38
-              self.y_g = 3.05
-              self.theta_g = 0.0
-              self.replan() 
 
+        print "finished init"
+        
     def dyn_cfg_callback(self, config, level):
-        rospy.loginfo("Reconfigure Request: k1:{k1}, k2:{k2}, k3:{k3}".format(**config))
+        rospy.loginfo("Reconfigure Request: k1:{k1}, k2:{k2}, k3:{k3}, v_des:{v_des}".format(**config))
         self.pose_controller.k1 = config["k1"]
         self.pose_controller.k2 = config["k2"]
         self.pose_controller.k3 = config["k3"]
+        self.v_des = config["v_des"]
         return config
 
     def cmd_nav_callback(self, data):
@@ -143,10 +152,11 @@ class Navigator:
         """
         if data.x != self.x_g or data.y != self.y_g or data.theta != self.theta_g:
 
+            print('cmd_nav_callback goal:', self.x_g)
+
             self.x_g = data.x
             self.y_g = data.y
             self.theta_g = data.theta
-            rospy.loginfo("cmd_nav_callback goal: " + str(self.x_g)) 
             self.replan()
 
     def map_md_callback(self, msg):
@@ -191,6 +201,7 @@ class Navigator:
         returns whether the robot is close enough in position to the goal to
         start using the pose controller
         """
+        #print('near_goal state and goal: ', self.x, self.x_g, self.y, self.y_g )
         return linalg.norm(np.array([self.x-self.x_g, self.y-self.y_g])) < self.near_thresh
 
     def at_goal(self):
@@ -198,6 +209,11 @@ class Navigator:
         returns whether the robot has reached the goal position with enough
         accuracy to return to idle state
         """
+        #print('at_goal state and goal: ', self.x, self.x_g, self.y, self.y_g )
+	# *** Added G.S. 10/28/20***
+        if self.x_g is None :
+            return (True)
+        # **************************
         return (linalg.norm(np.array([self.x-self.x_g, self.y-self.y_g])) < self.near_thresh and abs(wrapToPi(self.theta - self.theta_g)) < self.at_thresh_theta)
 
     def aligned(self):
@@ -295,8 +311,7 @@ class Navigator:
         self.plan_start = x_init
         x_goal = self.snap_to_grid((self.x_g, self.y_g))
 
-        rospy.loginfo('In replan, x_init,y_init,th_init is:' + str(x_init))
-        rospy.loginfo('In replan, x_goal is:' + str(x_goal))
+	print('x_goal ',x_goal)
 
         problem = AStar(state_min,state_max,x_init,x_goal,self.occupancy,self.plan_resolution)
 
@@ -311,7 +326,7 @@ class Navigator:
         
 
         # Check whether path is too short
-        if len(planned_path) < 4:    
+        if len(planned_path) < 4:
             rospy.loginfo("Path too short to track")
             self.switch_mode(Mode.PARK)
             return
