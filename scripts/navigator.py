@@ -3,7 +3,7 @@
 import rospy
 from nav_msgs.msg import OccupancyGrid, MapMetaData, Path
 from geometry_msgs.msg import Twist, Pose2D, PoseStamped
-from asl_turtlebot.msg import DetectedObject
+from asl_turtlebot.msg import DetectedObject, DetectedObjectList
 from std_msgs.msg import String
 import tf
 import numpy as np
@@ -180,7 +180,7 @@ class Navigator:
         self.delivery_req_locs = []
         food_name_to_loc_idx_dict = {'hotdog': 0, 'orange' : 1, 'otherFood': 2 }
         self.delivery_req_list = msg.split(',')
-        for item in pickup_items:
+        for item in self.delivery_req_list:
             idx = food_name_to_loc_idx_dict[item]
             location = self.marker_locs[idx]
             self.delivery_req_locs.append(location)
@@ -199,7 +199,7 @@ class Navigator:
 
     def set_next_goal(self):
 
-        if self.current_delivery_idx < len(self.delivery_req_locs) - 1
+        if self.current_delivery_idx < len(self.delivery_req_locs) - 1:
             self.current_delivery_idx += 1
             current_delivery = self.delivery_req_locs[current_delivery_idx]
             print('going to next pickup location')
