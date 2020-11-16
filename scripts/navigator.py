@@ -64,7 +64,7 @@ class Navigator:
         # plan parameters
         self.plan_resolution =  0.1
         self.plan_horizon = 15
-        self.plan_horizon = 30   # *** Changed GS 11/14/2020 *****
+        #self.plan_horizon = 30   # *** Changed GS 11/14/2020 *****
 
         # time when we started following the plan
         self.current_plan_start_time = rospy.get_rostime()
@@ -86,7 +86,7 @@ class Navigator:
 
         # trajectory smoothing
         self.spline_alpha = 0.15
-        self.spline_alpha = 0.20   # *** Changed GS 11/14/2020 *****
+        #self.spline_alpha = 0.20   # *** Changed GS 11/14/2020 *****
         self.traj_dt = 0.1
 
         # trajectory tracking controller parameters
