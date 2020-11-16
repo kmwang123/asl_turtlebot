@@ -27,6 +27,10 @@ class PoseController:
         self.rho_pub   = rospy.Publisher('/controller/rho', Float64, queue_size=1)
         #***************************************************************************
 
+	# ************ GS ***
+	self.x_g = None
+	self.y_g = None
+	self.th_g = None
 
     def load_goal(self, x_g, y_g, th_g):
         """ Loads in a new goal position """

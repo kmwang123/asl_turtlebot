@@ -221,7 +221,9 @@ class AStar(object):
         """
         ########## Code starts here ##########
 
-        
+        if not self.is_free( self.x_goal ) :
+	    print('WARNING: Goal pose is not reachable')
+	    return False        
         
         #print(' xmin ymin xmax ymax ',self.statespace_lo, self.statespace_hi )
         

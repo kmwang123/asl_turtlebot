@@ -166,17 +166,20 @@ class Navigator:
 
 
     def delivery_callback(self, msg):
-#        self.delivery_req_list.append(msg)
-#        if msg in self.delivery_req_list:
-#              self.ifdelivery = True
-#
-#        elif msg in ['waypoint1']:
-#              self.x_g = 3.38
-#              self.y_g = 3.05
-#              self.theta_g = 0.0
-#              self.replan()
+        self.delivery_req_list.append(msg)
+        if msg.data in self.delivery_req_list:
+              self.ifdelivery = True
+    
+        elif msg.data in ['waypoint1']:
+   
+              self.x_g = 3.38 + 0.1
+              self.y_g = 1.6 #3.05
+              self.theta_g = 0.0
+              self.replan()
         #elif msg in ['home']:
         #    self.x_g
+	"""
+	print("Delivery Callback")
         self.delivery_req_locs = []
         food_name_to_loc_idx_dict = {'hotdog': 0, 'orange' : 1, 'otherFood': 2 }
         self.delivery_req_list = msg.split(',')
@@ -196,9 +199,9 @@ class Navigator:
             self.y_g = current_delivery[1]
             self.theta_g = 0.0
             self.replan()
-
+	"""
     def set_next_goal(self):
-
+	print("set next goal call back")
         if self.current_delivery_idx < len(self.delivery_req_locs) - 1:
             self.current_delivery_idx += 1
             current_delivery = self.delivery_req_locs[current_delivery_idx]
@@ -223,7 +226,7 @@ class Navigator:
         loads in goal if different from current goal, and replans
         """
         if data.x != self.x_g or data.y != self.y_g or data.theta != self.theta_g:
-
+	    print("command nav callback, nav goal changed")
             self.x_g = data.x
             self.y_g = data.y
             self.theta_g = data.theta
@@ -252,7 +255,8 @@ class Navigator:
                                                   self.map_origin[0],
                                                   self.map_origin[1],
                                                   8,
-                                                  self.map_probs)
+                                                  self.map_probs,
+                                                  thresh=0.7)
             if self.x_g is not None:
                 # if we have a goal to plan to, replan
                 rospy.loginfo("replanning because of new map")
@@ -279,6 +283,11 @@ class Navigator:
         returns whether the robot has reached the goal position with enough
         accuracy to return to idle state
         """
+	# *** Added G.S. 10/28/20***
+        if self.x_g is None :
+            return (True)
+        # **************************
+        
         return (linalg.norm(np.array([self.x-self.x_g, self.y-self.y_g])) < self.near_thresh and abs(wrapToPi(self.theta - self.theta_g)) < self.at_thresh_theta)
 
     def aligned(self):
@@ -391,10 +400,20 @@ class Navigator:
         planned_path = problem.path
 
 
+
         # Check whether path is too short
-        if len(planned_path) < 4:
+        #if len(planned_path) < 2:  #*** Karens change **
+        if len(planned_path) < 4: 
             rospy.loginfo("Path too short to track")
-            self.switch_mode(Mode.PARK)
+	    # **** Added GS 11/13/2020 *************************
+	    if self.at_goal():
+		print('Already at goal - seclect another goal')
+		#pdb.set_trace()
+		self.switch_mode(Mode.IDLE)
+		return
+            if self.mode != Mode.PARK:
+	    # *************************************************
+		self.switch_mode(Mode.PARK)
             return
 
         # Smooth and generate a trajectory
@@ -459,7 +478,8 @@ class Navigator:
             # STATE MACHINE LOGIC
             # some transitions handled by callbacks
             if self.mode == Mode.IDLE:
-                pass
+                
+		pass
             elif self.mode == Mode.ALIGN:
                 if self.aligned():
                     self.current_plan_start_time = rospy.get_rostime()
@@ -474,19 +494,33 @@ class Navigator:
                     rospy.loginfo("replanning because out of time")
                     self.replan() # we aren't near the goal but we thought we should have been, so replan
             elif self.mode == Mode.PARK:
-                if self.at_goal():
+                
+		if self.at_goal():
                     # forget about goal:
-
+                    """
                     print('reached goal')
+		    self.mode = Mode.IDLE
                     if self.ifdelivery:
+			print("go to next pickup spot")
                         set_next_goal()
                         self.mode = Mode.TRACK
+		    """
+		    # forget about goal:
 
+                    print('Fahgetaboutit')
 
-#                    self.x_g = None
-#                    self.y_g = None
-#                    self.theta_g = None
-#                    self.switch_mode(Mode.IDLE)
+                    self.x_g = None
+                    self.y_g = None
+                    self.theta_g = None
+                    self.switch_mode(Mode.IDLE)
+
+	    # Added GS 11/13/2020 ******************
+	    if self.x_g is None :  
+		print('Warning: goal undefined')
+
+	    if self.pose_controller.x_g is None :
+		self.pose_controller.load_goal(self.x_g, self.y_g, self.theta_g)
+		# ************************************************************
 
             self.publish_control()
             rate.sleep()
