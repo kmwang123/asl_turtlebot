@@ -49,6 +49,9 @@ class Navigator:
         self.marker3_loc = None
         self.marker4_loc = None
 
+        self.marker_locs = [None]*5
+        self.delivery_req_locs = []
+        self.current_delivery_idx = None
         # current state
         self.x = 0.0
         self.y = 0.0
@@ -81,7 +84,7 @@ class Navigator:
         self.current_plan_start_time = rospy.get_rostime()
         self.current_plan_duration = 0
         self.plan_start = [0.,0.]
-        
+
         # Robot limits
         self.v_max = 0.5    # maximum velocity (orig is 0.2)
         self.om_max = 1.0   # maximum angular velocity (orig is 0.4)
@@ -131,38 +134,82 @@ class Navigator:
         rospy.Subscriber('/cmd_nav', Pose2D, self.cmd_nav_callback)
         rospy.Subscriber('/delivery_request',  String, self.delivery_callback)
         rospy.Subscriber('/detected_objects_list', DetectedObjectList, self.detected_obj_callback)
-        rospy.Subscriber('/marker_topic_0', Marker, self.marker0_callback)
-        rospy.Subscriber('/marker_topic_1', Marker, self.marker1_callback)
-        rospy.Subscriber('/marker_topic_2', Marker, self.marker2_callback)
-        rospy.Subscriber('/marker_topic_3', Marker, self.marker3_callback)
-        rospy.Subscriber('/marker_topic_4', Marker, self.marker4_callback)
+#        rospy.Subscriber('/marker_topic_0', Marker, self.marker0_callback)
+#        rospy.Subscriber('/marker_topic_1', Marker, self.marker1_callback)
+#        rospy.Subscriber('/marker_topic_2', Marker, self.marker2_callback)
+#        rospy.Subscriber('/marker_topic_3', Marker, self.marker3_callback)
+#        rospy.Subscriber('/marker_topic_4', Marker, self.marker4_callback)
+        rospy.Subscriber('/marker_topic_0', Marker, self.markers_callback)
+        rospy.Subscriber('/marker_topic_1', Marker, self.markers_callback)
+        rospy.Subscriber('/marker_topic_2', Marker, self.markers_callback)
+        rospy.Subscriber('/marker_topic_3', Marker, self.markers_callback)
+        rospy.Subscriber('/marker_topic_4', Marker, self.markers_callback)
 
-    def marker0_callback(self, msg):
-        self.marker0_loc = (msg.pose.position.x, msg.pose.position.y)
-    def marker1_callback(self, msg):
-        self.marker1_loc = (msg.pose.position.x, msg.pose.position.y)
-    def marker2_callback(self, msg):
-        self.marker2_loc = (msg.pose.position.x, msg.pose.position.y)
-    def marker3_callback(self, msg):
-        self.marker3_loc = (msg.pose.position.x, msg.pose.position.y)
-    def marker4_callback(self, msg):
-        self.marker4_loc = (msg.pose.position.x, msg.pose.position.y)
+
+#    def marker0_callback(self, msg):
+#        self.marker0_loc = (msg.pose.position.x, msg.pose.position.y)
+#    def marker1_callback(self, msg):
+#        self.marker1_loc = (msg.pose.position.x, msg.pose.position.y)
+#    def marker2_callback(self, msg):
+#        self.marker2_loc = (msg.pose.position.x, msg.pose.position.y)
+#    def marker3_callback(self, msg):
+#        self.marker3_loc = (msg.pose.position.x, msg.pose.position.y)
+#    def marker4_callback(self, msg):
+#        self.marker4_loc = (msg.pose.position.x, msg.pose.position.y)
     def detected_obj_callback(self, msg):
         self.detected_objects_names = msg.objects
         self.detected_objects = msg.ob_msgs
 
-    def delivery_callback(self, msg):
-        self.delivery_req_list.append(msg)
-        if msg in self.delivery_req_list:
-              self.ifdelivery = True
+    def markers_callback(self, msg):
+        marker_ID = msg.id
+        self.marker_locs[marker_ID] = (msg.pose.position.x, msg.pose.position.y)
 
-        elif msg in ['waypoint1']:
-              self.x_g = 3.38
-              self.y_g = 3.05
-              self.theta_g = 0.0
-              self.replan() 
+
+    def delivery_callback(self, msg):
+#        self.delivery_req_list.append(msg)
+#        if msg in self.delivery_req_list:
+#              self.ifdelivery = True
+#
+#        elif msg in ['waypoint1']:
+#              self.x_g = 3.38
+#              self.y_g = 3.05
+#              self.theta_g = 0.0
+#              self.replan()
         #elif msg in ['home']:
-        #    self.x_g 
+        #    self.x_g
+        self.delivery_req_locs = []
+        food_name_to_loc_idx_dict = {'hotdog': 0, 'orange' : 1, 'otherFood': 2 }
+        self.delivery_req_list = msg.split(',')
+        for item in pickup_items:
+            idx = food_name_to_loc_idx_dict[item]
+            location = self.marker_locs[idx]
+            self.delivery_req_locs.append(location)
+
+        #check and see if any requested items are in unknown locations
+        if any(loc is None for loc in self.delivery_req_locs):
+            print("at least one item location unknown in request")
+        else:
+            self.ifdelivery = True
+            self.current_delivery_idx = 0
+            current_delivery = self.delivery_req_locs[current_delivery_idx]
+            self.x_g = current_delivery[0]
+            self.y_g = current_delivery[1]
+            self.theta_g = 0.0
+            self.replan()
+
+    def set_next_goal(self):
+
+        if self.current_delivery_idx < len(self.delivery_req_locs) - 1
+            self.current_delivery_idx += 1
+            current_delivery = self.delivery_req_locs[current_delivery_idx]
+            print('going to next pickup location')
+            self.x_g = current_delivery[0]
+            self.y_g = current_delivery[1]
+            self.theta_g = 0.0
+            self.replan()
+        else:
+            self.ifdelivery = False
+            print("delivered everything")
 
     def dyn_cfg_callback(self, config, level):
         rospy.loginfo("Reconfigure Request: k1:{k1}, k2:{k2}, k3:{k3}".format(**config))
@@ -180,7 +227,7 @@ class Navigator:
             self.x_g = data.x
             self.y_g = data.y
             self.theta_g = data.theta
-            rospy.loginfo("cmd_nav_callback goal: " + str(self.x_g)) 
+            rospy.loginfo("cmd_nav_callback goal: " + str(self.x_g))
             self.replan()
 
     def map_md_callback(self, msg):
@@ -240,7 +287,7 @@ class Navigator:
         (enough to switch to tracking controller)
         """
         return (abs(wrapToPi(self.theta - self.th_init)) < self.theta_start_thresh)
-        
+
     def close_to_plan_start(self):
         return (abs(self.x - self.plan_start[0]) < self.start_pos_thresh and abs(self.y - self.plan_start[1]) < self.start_pos_thresh)
 
@@ -342,10 +389,10 @@ class Navigator:
         rospy.loginfo("Planning Succeeded")
 
         planned_path = problem.path
-        
+
 
         # Check whether path is too short
-        if len(planned_path) < 4:    
+        if len(planned_path) < 4:
             rospy.loginfo("Path too short to track")
             self.switch_mode(Mode.PARK)
             return
@@ -430,17 +477,21 @@ class Navigator:
                 if self.at_goal():
                     # forget about goal:
 
-                    print('Fahgetaboutit')
+                    print('reached goal')
+                    if self.ifdelivery:
+                        set_next_goal()
+                        self.mode = Mode.TRACK
 
-                    self.x_g = None
-                    self.y_g = None
-                    self.theta_g = None
-                    self.switch_mode(Mode.IDLE)
+
+#                    self.x_g = None
+#                    self.y_g = None
+#                    self.theta_g = None
+#                    self.switch_mode(Mode.IDLE)
 
             self.publish_control()
             rate.sleep()
 
-if __name__ == '__main__':    
+if __name__ == '__main__':
     nav = Navigator()
     rospy.on_shutdown(nav.shutdown_callback)
     nav.run()
