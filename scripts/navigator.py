@@ -81,7 +81,7 @@ class Navigator:
         self.map_probs = []
         self.occupancy = None
         self.occupancy_updated = False
-        self.map_threshold = 50 
+        self.map_threshold = 50
 
         # plan parameters
         self.plan_resolution =  0.04
@@ -91,7 +91,7 @@ class Navigator:
         self.current_plan_start_time = rospy.get_rostime()
         self.current_plan_duration = 0
         self.plan_start = [0.,0.]
-        
+
         # Robot limits
         self.v_max = 0.21    # maximum velocity (orig is 0.2)
         self.om_max = 0.35   # maximum angular velocity (orig is 0.4)
@@ -136,7 +136,7 @@ class Navigator:
         self.trans_listener = tf.TransformListener()
 
         #self.cfg_srv = Server(NavigatorConfig, self.dyn_cfg_callback)
-        
+
         rospy.Subscriber('/map', OccupancyGrid, self.map_callback)
         rospy.Subscriber('/map_metadata', MapMetaData, self.map_md_callback)
         rospy.Subscriber('/cmd_nav', Pose2D, self.cmd_nav_callback)
@@ -150,7 +150,7 @@ class Navigator:
         #rospy.Subscriber('/detector/stop_sign', DetectedObject, self.stop_sign_detected_callback)
 
     def marker_callback(self, msg):
-        self.marker_dict[msg.id] = (msg.pose.position.x, msg.pose.position.y) 
+        self.marker_dict[msg.id] = (msg.pose.position.x, msg.pose.position.y)
 
     def detected_obj_callback(self, msg):
         self.detected_objects_names = msg.objects
@@ -159,7 +159,7 @@ class Navigator:
     def delivery_callback(self, msg):
         self.delivery_req_list.append(msg.data)
         if msg.data in self.detected_objects_names:
-            self.ifdelivery = True
+#            self.ifdelivery = True
             self.delivery_req_list = msg.data.split(',')
             #find what index is associated with what object
             #The markers are numbers as the robot sees it
@@ -167,23 +167,36 @@ class Navigator:
             for i in range(len(self.detected_objects_names)):
                 self.objectname_markerLoc_dict[self.detected_objects_names[i]] = self.marker_dict[i]
             #we assume we have all the items in the list and the map is known
-            for i in range(self.delivery_req_list):
-                self.deliver(self.delivery_req_list[i])
+#            for i in range(self.delivery_req_list):
+#                self.deliver(self.delivery_req_list[i])
+            for item in self.delivery_req_list:
+                location = self.objectname_markerLoc_dict[item]
+                self.delivery_req_locs.append(location)
+
+            if any(loc is None for loc in self.delivery_req_locs):
+                print("at least one item location unknown in request")
+            else:
+                self.ifdelivery = True
+                self.current_delivery_idx = 0
+                object_name = self.delivery_req_list[self.current_delivery_idx]
+                deliver(self, object_name)
+
+
         elif msg.data in ['waypoint1']:
             self.x_g = 3.42
-            self.y_g = 2.38 
+            self.y_g = 2.38
             self.theta_g = np.pi/2.0
             self.replan()
-        elif msg.data in ['waypoint2']: 
-            self.x_g = 3.06 #3.2 
+        elif msg.data in ['waypoint2']:
+            self.x_g = 3.06 #3.2
             self.y_g = 2.82
             self.theta_g = -np.pi
             self.replan()
         elif msg.data in ['waypoint3']:
-            self.x_g = 1.63 
+            self.x_g = 1.63
             self.y_g = 2.73
             self.theta_g = -np.pi #-np.pi
-            self.replan() 
+            self.replan()
         elif msg.data in ['waypoint4']:
             self.x_g = 0.684
             self.y_g = 2.75
@@ -229,7 +242,7 @@ class Navigator:
         #find what index is associated with what object
         #The markers are numbers as the robot sees it
         #and the detected objects list is labeled as the  robot sees it
-        self.x_g, self.y_g = self.objectname_markerLoc_dict[object_name]  
+        self.x_g, self.y_g = self.objectname_markerLoc_dict[object_name]
         self.theta_g = 0.0
         self.replan()
 
@@ -249,7 +262,7 @@ class Navigator:
             self.x_g = data.x
             self.y_g = data.y
             self.theta_g = data.theta
-            rospy.loginfo("cmd_nav_callback goal: " + str(self.x_g)) 
+            rospy.loginfo("cmd_nav_callback goal: " + str(self.x_g))
             self.replan()
 
     def map_md_callback(self, msg):
@@ -366,7 +379,7 @@ class Navigator:
         (enough to switch to tracking controller)
         """
         return (abs(wrapToPi(self.theta - self.th_init)) < self.theta_start_thresh)
-        
+
     def close_to_plan_start(self):
         return (abs(self.x - self.plan_start[0]) < self.start_pos_thresh and abs(self.y - self.plan_start[1]) < self.start_pos_thresh)
 
@@ -449,8 +462,8 @@ class Navigator:
         cmd_vel = Twist()
         cmd_vel.linear.x = V
         cmd_vel.angular.z = om
-        self.nav_vel_pub.publish(cmd_vel) 
-        return 1 
+        self.nav_vel_pub.publish(cmd_vel)
+        return 1
 
     def replan(self):
         """
@@ -491,7 +504,7 @@ class Navigator:
             #time0 = rospy.get_rostime()
             #time  = rospy.get_rostime()
             #while time-time0  <  rospy.Duration.from_sec(self.move_time):
-            #    time = rospy.get_rostime() 
+            #    time = rospy.get_rostime()
             #    flag = self.keep_moving()
             #    if flag == -1:
             #         break
@@ -499,10 +512,10 @@ class Navigator:
         rospy.loginfo("Planning Succeeded")
 
         planned_path = problem.path
-        
+
 
         # Check whether path is too short
-        if len(planned_path) < 4:    
+        if len(planned_path) < 4:
             rospy.loginfo("Path too short to track")
             self.switch_mode(Mode.PARK)
             return
@@ -604,12 +617,18 @@ class Navigator:
                     self.y_g = None
                     self.theta_g = None
                     self.switch_mode(Mode.IDLE)
+                    #in delivery mode, need to go to next pickup zone
+                    if self.ifdelivery:
+                        self.current_delivery_idx += 1
+                        object_name = self.delivery_req_list[self.current_delivery_idx]
+                        deliver(self, object_name)
+
 
             self.publish_control()
 
             rate.sleep()
 
-if __name__ == '__main__':    
+if __name__ == '__main__':
     nav = Navigator()
     rospy.on_shutdown(nav.shutdown_callback)
     nav.run()
