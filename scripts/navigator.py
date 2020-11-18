@@ -606,7 +606,7 @@ class Navigator:
                     self.switch_mode(Mode.IDLE)
 
             self.publish_control()
-
+	    print(self.mode)
             rate.sleep()
 
 if __name__ == '__main__':    
