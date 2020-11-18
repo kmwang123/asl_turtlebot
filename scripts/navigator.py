@@ -74,7 +74,9 @@ class Navigator:
         self.map_threshold = 50 
 
         # plan parameters
-        self.plan_resolution =  0.1/6
+        #self.plan_resolution =  0.1/6
+	#**** Changed GS 11/17/2020 ********************************
+        self.plan_resolution =  0.05# set to equal gmapping /delta 
         self.plan_horizon = 4.0
 
         # time when we started following the plan
@@ -96,7 +98,8 @@ class Navigator:
         self.at_thresh_theta = 0.05
 
         # trajectory smoothing
-        self.spline_alpha = 0.15
+        #self.spline_alpha = 0.15
+        self.spline_alpha = 0.05 #*** Changed GS 11/17/2020
         self.traj_dt = 0.1
 
         # trajectory tracking controller parameters
