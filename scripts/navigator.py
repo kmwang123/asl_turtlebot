@@ -182,7 +182,7 @@ class Navigator:
                 self.ifdelivery = True
                 self.current_delivery_idx = 0
                 object_name = self.delivery_req_list[self.current_delivery_idx]
-                deliver(self, object_name)
+                self.deliver(object_name)
 
 
         elif msg.data in ['waypoint1']:
@@ -626,11 +626,13 @@ class Navigator:
                         self.current_delivery_idx += 1
 			print("going to next pickup spot")
                         object_name = self.delivery_req_list[self.current_delivery_idx]
-                        deliver(self, object_name)
+                        self.deliver(object_name)
 
 
             self.publish_control()
-	    print(self.mode)
+	    
+	    #if (self.x_g is not None) and (self.y_g is not None):
+	    	#print("current goal %f, %f"%(self.x_g, self.y_g))
             rate.sleep()
 
 if __name__ == '__main__':
