@@ -48,7 +48,8 @@ class Navigator:
         self.detected_objects = []
         self.marker_dict = {}
         self.objectname_markerLoc_dict = {}
-
+	self.delivery_req_locs = []
+	
         #stop sign params
         self.stop_min_dist = 0.5
         self.stop_time = 3.
@@ -161,6 +162,7 @@ class Navigator:
         if msg.data in self.detected_objects_names:
 #            self.ifdelivery = True
             self.delivery_req_list = msg.data.split(',')
+	    print("received order for %s"%(msg.data))
             #find what index is associated with what object
             #The markers are numbers as the robot sees it
             #and the detected objects list is labeled as the  robot sees it
@@ -176,6 +178,7 @@ class Navigator:
             if any(loc is None for loc in self.delivery_req_locs):
                 print("at least one item location unknown in request")
             else:
+		print("going to first pickup spot")
                 self.ifdelivery = True
                 self.current_delivery_idx = 0
                 object_name = self.delivery_req_list[self.current_delivery_idx]
@@ -245,6 +248,7 @@ class Navigator:
         self.x_g, self.y_g = self.objectname_markerLoc_dict[object_name]
         self.theta_g = 0.0
         self.replan()
+	print("delivering to: %f, %f"%(self.x_g, self.y_g))
 
     def dyn_cfg_callback(self, config, level):
         rospy.loginfo("Reconfigure Request: k1:{k1}, k2:{k2}, k3:{k3}".format(**config))
@@ -620,12 +624,13 @@ class Navigator:
                     #in delivery mode, need to go to next pickup zone
                     if self.ifdelivery:
                         self.current_delivery_idx += 1
+			print("going to next pickup spot")
                         object_name = self.delivery_req_list[self.current_delivery_idx]
                         deliver(self, object_name)
 
 
             self.publish_control()
-
+	    print(self.mode)
             rate.sleep()
 
 if __name__ == '__main__':
