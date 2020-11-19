@@ -455,22 +455,22 @@ class Navigator:
         #front of robot
         dist = 3*self.plan_resolution
         x_front = (self.x+dist*np.cos(self.theta), self.y+dist*np.sin(self.theta))
-        x_back  = (self.x-dist*np.cos(self.theta), self.y-dist*np.sin(self.theta))
+        #x_back  = (self.x-dist*np.cos(self.theta), self.y-dist*np.sin(self.theta))
         if self.occupancy.is_free(x_front):
             rospy.loginfo("Navigator: Keep moving forwards")
             V  = 0.06
             om = 0.0
-        elif self.occupancy.is_free(x_back):
-            rospy.loginfo("Navigator: Keep moving backwards")
-            V  = -0.06
-            om = 0.0
-        else:
-            return -1
+        #elif self.occupancy.is_free(x_back):
+        #    rospy.loginfo("Navigator: Keep moving backwards")
+        #    V  = -0.06
+        #    om = 0.0
+        #else:
+        #    return -1
         cmd_vel = Twist()
         cmd_vel.linear.x = V
         cmd_vel.angular.z = om
         self.nav_vel_pub.publish(cmd_vel) 
-        return 1 
+        #return 1 
 
     def replan(self):
         """
@@ -603,8 +603,8 @@ class Navigator:
                     self.keep_moving()
                     if self.has_crossed():
                         self.keep_moving()
-                        self.mode = Mode.TRACK
                         break
+                    self.replan()
             elif self.mode == Mode.ALIGN:
                 if self.aligned():
                     self.current_plan_start_time = rospy.get_rostime()
