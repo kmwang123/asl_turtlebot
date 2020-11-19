@@ -49,7 +49,7 @@
     <param name="temporalUpdate" value="0.5"/>
     <param name="delta" value="0.04"/>
     <param name="lskip" value="0"/>
-    <param name="particles" value="120"/>
+    <param name="particles" value="350"/>
     <param name="sigma" value="0.05"/>
     <param name="kernelSize" value="1"/>
     <param name="lstep" value="0.05"/>
