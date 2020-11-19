@@ -21,7 +21,10 @@ from visualization_msgs.msg import Marker
 from dynamic_reconfigure.server import Server
 from asl_turtlebot.cfg import NavigatorConfig
 
+import waypoints
 import pdb
+
+NUM_WAYPOINTS = 9
 
 # state machine modes, not all implemented
 class Mode(Enum):
@@ -43,11 +46,11 @@ class Navigator:
 
         #delivery lists
         self.delivery_req_list = []
-        self.ifdelivery  = False
         self.detected_objects_names = []
         self.detected_objects = []
         self.marker_dict = {}
         self.objectname_markerLoc_dict = {}
+        self.delivery_flag = False
 
         #stop sign params
         self.stop_min_dist = 0.5
@@ -56,6 +59,9 @@ class Navigator:
 
         #force move params
         self.move_time = 3.
+        self.wait_time  =  7.0
+        self.waypoint_flag = 1
+        self.vendor_ind = 0
 
         # current state
         self.x = 0.0
@@ -147,7 +153,7 @@ class Navigator:
         rospy.Subscriber('/marker_topic_2', Marker, self.marker_callback)
         rospy.Subscriber('/marker_topic_3', Marker, self.marker_callback)
         rospy.Subscriber('/marker_topic_4', Marker, self.marker_callback)
-        #rospy.Subscriber('/detector/stop_sign', DetectedObject, self.stop_sign_detected_callback)
+        rospy.Subscriber('/detector/stop_sign', DetectedObject, self.stop_sign_detected_callback)
 
     def marker_callback(self, msg):
         self.marker_dict[msg.id] = (msg.pose.position.x, msg.pose.position.y) 
@@ -155,39 +161,43 @@ class Navigator:
     def detected_obj_callback(self, msg):
         self.detected_objects_names = msg.objects
         self.detected_objects = msg.ob_msgs
-
-    def delivery_callback(self, msg):
-        self.delivery_req_list.append(msg.data)
-        if msg.data in self.detected_objects_names:
-            self.ifdelivery = True
-            self.delivery_req_list = msg.data.split(',')
-            #find what index is associated with what object
-            #The markers are numbers as the robot sees it
-            #and the detected objects list is labeled as the  robot sees it
+        #only create this dictionary once
+        if self.delivery_flag and len(self.objectname_markerLoc_dict) == 0:
             for i in range(len(self.detected_objects_names)):
                 self.objectname_markerLoc_dict[self.detected_objects_names[i]] = self.marker_dict[i]
-            #we assume we have all the items in the list and the map is known
-            for i in range(self.delivery_req_list):
-                self.deliver(self.delivery_req_list[i])
+
+    def delivery_callback(self, msg):
+        if msg.data in self.detected_objects_names and self.delivery_flag == True:
+            self.delivery_req_list = msg.data.split(',')
+            first_item = self.delivery_req_list.pop(0)
+            self.x_g, self.y_g = self.objectname_markerLoc_dict[first_item]
+            self.theta_g = self.theta
+            self.replan()
+        elif msg.data in ['go to waypoints']:
+            #load first goal and go to navigation mode
+            self.x_g, self.y_g, self.theta_g = waypoints.pose[self.vendor_ind]
+            self.replan()
+            #self.switch_mode(Mode.TRACK)            
+          
         elif msg.data in ['waypoint1']:
-            self.x_g = 3.42
-            self.y_g = 2.38 
+            self.x_g = 3.327
+            self.y_g = 2.373 
             self.theta_g = np.pi/2.0
             self.replan()
         elif msg.data in ['waypoint2']: 
-            self.x_g = 3.06 #3.2 
-            self.y_g = 2.82
+            self.x_g = 2.9 #3.2 
+            self.y_g = 2.76
             self.theta_g = -np.pi
             self.replan()
         elif msg.data in ['waypoint3']:
-            self.x_g = 1.63 
-            self.y_g = 2.73
+            self.x_g = 1.8 
+            self.y_g = 2.8
             self.theta_g = -np.pi #-np.pi
             self.replan() 
         elif msg.data in ['waypoint4']:
-            self.x_g = 0.684
-            self.y_g = 2.75
-            self.theta_g = -1.81
+            self.x_g = 0.642
+            self.y_g = 2.72
+            self.theta_g = -1.86
             self.replan()
         elif msg.data in ['waypoint5']:
             self.x_g = 0.25
@@ -219,11 +229,13 @@ class Navigator:
             self.y_g = 0.2
             self.theta_g = -np.pi
             self.replan()
-        elif msg.data in ['home']:
+        elif msg.data in ['go back home']:
             self.x_g = self.x_init
             self.y_g = self.y_init
             self.theta_g  = 0.0
             self.replan()
+            self.waypoint_flag = 0
+            self.delivery_flag = True
 
     def deliver(self, object_name):
         #find what index is associated with what object
@@ -232,6 +244,7 @@ class Navigator:
         self.x_g, self.y_g = self.objectname_markerLoc_dict[object_name]  
         self.theta_g = 0.0
         self.replan()
+        
 
     def dyn_cfg_callback(self, config, level):
         rospy.loginfo("Reconfigure Request: k1:{k1}, k2:{k2}, k3:{k3}".format(**config))
@@ -333,7 +346,7 @@ class Navigator:
         """ sends zero velocity to stay put """
 
         vel_g_msg = Twist()
-        self.cmd_vel_publisher.publish(vel_g_msg)
+        self.nav_vel_pub.publish(vel_g_msg)
     def init_crossing(self):
         """ initiates an intersection crossing maneuver """
 
@@ -431,26 +444,33 @@ class Navigator:
         t = (rospy.get_rostime()-self.current_plan_start_time).to_sec()
         return max(0.0, t)  # clip negative time to 0
 
+    def wait(self):
+        time0 = rospy.get_rostime()
+        time  = rospy.get_rostime()
+        while time-time0  <  rospy.Duration.from_sec(self.wait_time):
+           time = rospy.get_rostime() 
+           self.stay_idle()
+
     def keep_moving(self):
         #front of robot
         dist = 3*self.plan_resolution
         x_front = (self.x+dist*np.cos(self.theta), self.y+dist*np.sin(self.theta))
-        x_back  = (self.x-dist*np.cos(self.theta), self.y-dist*np.sin(self.theta))
+        #x_back  = (self.x-dist*np.cos(self.theta), self.y-dist*np.sin(self.theta))
         if self.occupancy.is_free(x_front):
             rospy.loginfo("Navigator: Keep moving forwards")
             V  = 0.06
             om = 0.0
-        elif self.occupancy.is_free(x_back):
-            rospy.loginfo("Navigator: Keep moving backwards")
-            V  = -0.06
-            om = 0.0
-        else:
-            return -1
+        #elif self.occupancy.is_free(x_back):
+        #    rospy.loginfo("Navigator: Keep moving backwards")
+        #    V  = -0.06
+        #    om = 0.0
+        #else:
+        #    return -1
         cmd_vel = Twist()
         cmd_vel.linear.x = V
         cmd_vel.angular.z = om
         self.nav_vel_pub.publish(cmd_vel) 
-        return 1 
+        #return 1 
 
     def replan(self):
         """
@@ -582,8 +602,9 @@ class Navigator:
                 while True:
                     self.keep_moving()
                     if self.has_crossed():
-                        self.mode = Mode.TRACK
+                        self.keep_moving()
                         break
+                    self.replan()
             elif self.mode == Mode.ALIGN:
                 if self.aligned():
                     self.current_plan_start_time = rospy.get_rostime()
@@ -591,9 +612,16 @@ class Navigator:
             elif self.mode == Mode.TRACK:
                 if self.near_goal():
                     self.switch_mode(Mode.PARK)
-                elif not self.close_to_plan_start():
-                    rospy.loginfo("replanning because far from start")
-                    self.replan()
+                    #if we are in delivery mode, wait a few seconds then move on to next delivery
+                    if self.delivery_flag:
+                        self.wait()
+                        if len(self.delivery_req_list) != 0:
+                            self.x_g, self.y_g = self.objectname_markerLoc_dict[first_item]
+                            self.theta_g = self.theta
+                            self.replan()
+                #elif not self.close_to_plan_start():
+                #    rospy.loginfo("replanning because far from start")
+                #    self.replan()
                 elif (rospy.get_rostime() - self.current_plan_start_time).to_sec() > self.current_plan_duration:
                     rospy.loginfo("replanning because out of time")
                     self.replan() # we aren't near the goal but we thought we should have been, so replan
@@ -604,6 +632,14 @@ class Navigator:
                     self.y_g = None
                     self.theta_g = None
                     self.switch_mode(Mode.IDLE)
+
+                    #when we are at goal, wait a few seconds and  move on to next waypoint
+                    if self.waypoint_flag:
+                         self.wait()
+                         if self.vendor_ind != NUM_WAYPOINTS:
+                             self.x_g, self.y_g, self.theta_g = waypoints.pose[self.vendor_ind]
+                             self.vendor_ind += 1
+                             self.replan()
 
             self.publish_control()
 	    print(self.mode)
