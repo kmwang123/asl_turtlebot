@@ -60,8 +60,10 @@ class Navigator:
         #force move params
         self.move_time = 3.
         self.wait_time  =  7.0
+        self.wait_time  =  4.0	# *** Changed GS 11/19 ***********
         self.waypoint_flag = 1
         self.vendor_ind = 0
+	self.going_home = False # *** Added GS 11/19 ***********
 
         # current state
         self.x = 0.0
@@ -104,12 +106,15 @@ class Navigator:
 
         self.v_des = 0.12   # desired cruising velocity
         self.theta_start_thresh = 0.05   # threshold in theta to start moving forward when path-following
+        self.theta_start_thresh = 0.1 #*** Changed GS 11/19 *****************
+ 
         self.start_pos_thresh = 0.2     # threshold to be far enough into the plan to recompute it
 
         # threshold at which navigator switches from trajectory to pose control
         self.near_thresh = 0.2 #orig was 0.2
         self.at_thresh = 0.1 #orig  was 0.02
         self.at_thresh_theta = 0.05
+        self.at_thresh_theta = 0.1 #*** Changed GS 11/19 *****************
 
         # trajectory smoothing
         self.spline_alpha = 0.15
@@ -128,6 +133,7 @@ class Navigator:
 
         # heading controller parameters
         self.kp_th = 2.0 #orig was 2.
+        self.kp_th = 4.0 #*** CHANGED GS 11/19 ****.
 
         self.traj_controller = TrajectoryTracker(self.kpx, self.kpy, self.kdx, self.kdy, self.v_max, self.om_max)
         self.pose_controller = PoseController(self.k1, self.k2, self.k3, self.v_max, self.om_max)
@@ -236,6 +242,9 @@ class Navigator:
             self.replan()
             self.waypoint_flag = 0
             self.delivery_flag = True
+	    #self.going_home = True # *** Added GS 11/19 ***********
+	else:
+	    print("Error: destination undefined")   #*** ADDED GS 11/19 ************
 
     def deliver(self, object_name):
         #find what index is associated with what object
@@ -445,11 +454,13 @@ class Navigator:
         return max(0.0, t)  # clip negative time to 0
 
     def wait(self):
+	print("Waiting")    # *** ADDED GS 11/19 ****
         time0 = rospy.get_rostime()
         time  = rospy.get_rostime()
         while time-time0  <  rospy.Duration.from_sec(self.wait_time):
            time = rospy.get_rostime() 
            self.stay_idle()
+	print("Resuming")  # *** ADDED GS 11/19 ****
 
     def keep_moving(self):
         #front of robot
@@ -515,6 +526,33 @@ class Navigator:
             #    flag = self.keep_moving()
             #    if flag == -1:
             #         break
+
+	    # **** ADDED GS 11/19 ********************
+	    # try moving goal slightly
+	    """
+	    shift = 4.0
+	    x_goal = self.snap_to_grid((self.x_g + shift*self.map_resolution, self.y_g))
+	    success =  problem.solve()
+	    if success:
+		rospy.loginfo("Planning succeeded with modified goal")
+		return
+	    x_goal = self.snap_to_grid((self.x_g - shift*self.map_resolution, self.y_g))
+	    success =  problem.solve()
+	    if success:
+		rospy.loginfo("Planning succeeded with modified goal")
+		return
+	    x_goal = self.snap_to_grid((self.x_g, self.y_g + shift*self.map_resolution))
+	    success =  problem.solve()
+	    if success:
+		rospy.loginfo("Planning succeeded with modified goal")
+		return
+	    x_goal = self.snap_to_grid((self.x_g, self.y_g - shift*self.map_resolution))
+	    success =  problem.solve()
+	    if success:
+		rospy.loginfo("Planning succeeded with modified goal")
+		return
+	    # ****************************************************
+	    """
             return
         rospy.loginfo("Planning Succeeded")
 
@@ -524,8 +562,21 @@ class Navigator:
         # Check whether path is too short
         if len(planned_path) < 4:    
             rospy.loginfo("Path too short to track")
+
             self.switch_mode(Mode.PARK)
             return
+	    """
+	    # **** changed GS 11/13/2020 *************************
+	    if self.at_goal():
+		print('Already at goal - seclect another goal')
+		#pdb.set_trace()
+		self.switch_mode(Mode.IDLE)
+		return
+            if self.mode != Mode.PARK:
+                self.switch_mode(Mode.PARK)
+            return
+	    # *************************************************
+	    """
 
         # Smooth and generate a trajectory
         traj_new, t_new = compute_smoothed_traj(planned_path, self.v_des, self.spline_alpha, self.traj_dt)
@@ -614,6 +665,7 @@ class Navigator:
                     self.switch_mode(Mode.PARK)
                     #if we are in delivery mode, wait a few seconds then move on to next delivery
                     if self.delivery_flag:
+                    #if self.delivery_flag and not self.going_home:  #*** Changed GS 11/19 ***
                         self.wait()
                         if len(self.delivery_req_list) != 0:
                             self.x_g, self.y_g = self.objectname_markerLoc_dict[first_item]
@@ -640,6 +692,9 @@ class Navigator:
                              self.x_g, self.y_g, self.theta_g = waypoints.pose[self.vendor_ind]
                              self.vendor_ind += 1
                              self.replan()
+		    #else:  # *** Added GS 11/19 *****
+		    #    if self.going_home:
+		    #	    self.going_home = False
 
             self.publish_control()
 	    print(self.mode)
