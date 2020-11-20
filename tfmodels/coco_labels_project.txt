@@ -65,7 +65,7 @@
 64: none
 65: none
 66: none
-67: none table
+67: none
 68: none
 69: none
 70: none
