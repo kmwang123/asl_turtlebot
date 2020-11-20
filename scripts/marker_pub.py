@@ -30,6 +30,8 @@ class MarkerPublisher:
         #marker publishers
         self.marker_publishers = {}
         self.marker_info = {}
+        self.marker_text_publishers = {}
+        self.marker_info2 = {}
         
         #list of detected object publishers
         self.ob_list_pub  = rospy.Publisher('/detected_objects_list', DetectedObjectList,  queue_size=10)
@@ -81,6 +83,29 @@ class MarkerPublisher:
             marker.color.g = 0.0
             marker.color.b = 0.0
             self.marker_info[data.name] =  marker
+
+            self.marker_text_publishers[data.name] = rospy.Publisher('/marker_text_'+str(self.markerID)+'/', Marker, queue_size=10)
+            marker2 = Marker()
+            marker2.header.frame_id = "map"
+            marker2.header.stamp = rospy.Time()
+            marker2.type = 9 #text
+            marker2.pose.position.x = LOCATIONS[0]
+            marker2.pose.position.y = LOCATIONS[1]
+            marker2.pose.position.z = 0.3
+            marker2.pose.orientation.x = 0.0
+            marker2.pose.orientation.y = 0.0
+            marker2.pose.orientation.z = 0.0
+            marker2.pose.orientation.w = 1.0
+            marker2.scale.x = 0.1
+            marker2.scale.y = 0.1
+            marker2.scale.z = 0.1
+            marker2.color.a = 1.0 # Don't forget to set the alpha!
+            marker2.color.r = 0.0
+            marker2.color.g = 0.0
+            marker2.color.b = 0.0
+            marker2.text = data.name
+            self.marker_info2[data.name] =  marker2
+
             self.markerID += 1
 
         #publish  the  detected  objects  list and  its locations
@@ -113,6 +138,7 @@ class MarkerPublisher:
             if len(self.marker_publishers) != 0:
                 for marker_name in self.marker_publishers:
                     self.marker_publishers[marker_name].publish(self.marker_info[marker_name])
+                    self.marker_text_publishers[marker_name].publish(self.marker_info2[marker_name])
             #print('Published marker!')
 
             #continuously publish list of detected objects and  locations

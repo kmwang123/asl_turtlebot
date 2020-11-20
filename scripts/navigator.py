@@ -51,15 +51,17 @@ class Navigator:
         self.marker_dict = {}
         self.objectname_markerLoc_dict = {}
         self.delivery_flag = False
+        self.delivery_done = False
 
         #stop sign params
         self.stop_min_dist = 0.5
         self.stop_time = 3.
-        self.crossing_time = 3.
+        self.crossing_time = 8.
+        self.stop_flag = 0
 
         #force move params
         self.move_time = 3.
-        self.wait_time  =  7.0
+        self.wait_time  =  5.0
         self.waypoint_flag = 1
         self.vendor_ind = 0
         self.intermediate_goal_flag = 0
@@ -174,7 +176,8 @@ class Navigator:
                 self.objectname_markerLoc_dict[self.detected_objects_names[i]] = self.marker_dict[i]
 
     def delivery_callback(self, msg):
-        if msg.data in self.detected_objects_names and self.delivery_flag == True:
+        if msg.data in self.detected_objects_names:
+            self.delivery_flag = True
             self.delivery_req_list = msg.data.split(',')
             first_item = self.delivery_req_list.pop(0)
             self.x_g, self.y_g = self.objectname_markerLoc_dict[first_item]
@@ -236,13 +239,12 @@ class Navigator:
             self.y_g = 0.2
             self.theta_g = -np.pi
             self.replan()
-        elif msg.data in ['go back home']:
+        elif msg.data in ['home']:
             self.x_g = self.x_init
             self.y_g = self.y_init
-            self.theta_g  = 0.0
+            self.theta_g  = 4.71
             self.replan()
             self.waypoint_flag = 0
-            self.delivery_flag = True
 
     def deliver(self, object_name):
         #find what index is associated with what object
@@ -316,7 +318,7 @@ class Navigator:
                                                   self.map_origin[1],
                                                   8,
                                                   inflated_OG)
-            if self.x_g is not None:
+            if self.x_g is not None and self.stop_flag != 1:
                 # if we have a goal to plan to, replan
                 rospy.loginfo("replanning because of new map")
                 self.replan() # new map, need to replan
@@ -333,18 +335,18 @@ class Navigator:
     def stop_sign_detected_callback(self, msg):
         """ callback for when the detector has found a stop sign. Note that
         a distance of 0 can mean that the lidar did not pickup the stop sign at all """
-
         # distance of the stop sign
         dist = msg.distance
-
+        self.stop_flag = 1
         # if close enough and in track mode, stop
         if dist > 0 and dist < self.stop_min_dist and self.mode == Mode.TRACK:
             self.init_stop_sign()
 
     def init_stop_sign(self):
          """ initiates a stop sign maneuver """
+         rospy.loginfo("Stop Sign Detected")
          self.stop_sign_start = rospy.get_rostime()
-         self.mode = Mode.STOP
+         self.switch_mode(Mode.STOP)
     def has_stopped(self):
         """ checks if stop sign maneuver is over """
         return self.mode == Mode.STOP and \
@@ -355,10 +357,11 @@ class Navigator:
         vel_g_msg = Twist()
         self.nav_vel_pub.publish(vel_g_msg)
     def init_crossing(self):
+        rospy.loginfo("Crossing")
         """ initiates an intersection crossing maneuver """
 
         self.cross_start = rospy.get_rostime()
-        self.mode = Mode.CROSS
+        self.switch_mode(Mode.CROSS)
 
     def has_crossed(self):
         """ checks if crossing maneuver is over """
@@ -430,6 +433,14 @@ class Navigator:
             path_msg.poses.append(pose_st)
         publisher.publish(path_msg)
 
+    def force_control(self):
+        t = self.get_current_plan_time()
+        V, om = self.traj_controller.compute_control(self.x, self.y, self.theta, t)
+        cmd_vel = Twist()
+        cmd_vel.linear.x = V
+        cmd_vel.angular.z = om
+        self.nav_vel_pub.publish(cmd_vel)        
+
     def publish_control(self):
         """
         Runs appropriate controller depending on the mode. Assumes all controllers
@@ -465,26 +476,39 @@ class Navigator:
            time = rospy.get_rostime() 
            self.stay_idle()
 
-    def keep_moving(self):
+    def force_move(self):
         #front of robot
         dist = 3*self.plan_resolution
         x_front = (self.x+dist*np.cos(self.theta), self.y+dist*np.sin(self.theta))
-        #x_back  = (self.x-dist*np.cos(self.theta), self.y-dist*np.sin(self.theta))
+        x_back  = (self.x-dist*np.cos(self.theta), self.y-dist*np.sin(self.theta))
         if self.occupancy.is_free(x_front):
             rospy.loginfo("Navigator: Keep moving forwards")
             V  = 0.06
             om = 0.0
-        #elif self.occupancy.is_free(x_back):
-        #    rospy.loginfo("Navigator: Keep moving backwards")
-        #    V  = -0.06
-        #    om = 0.0
-        #else:
-        #    return -1
+        elif self.occupancy.is_free(x_back):
+            rospy.loginfo("Navigator: Keep moving backwards")
+            V  = -0.06
+            om = 0.0
+        else:
+            return -1
+        cmd_vel = Twist()
+        cmd_vel.linear.x = V
+        cmd_vel.angular.z = om
+        self.nav_vel_pub.publish(cmd_vel)
+        return 1 
+
+    def keep_moving(self):
+        #front of robot
+        dist = 3*self.plan_resolution
+        x_front = (self.x+dist*np.cos(self.theta), self.y+dist*np.sin(self.theta))
+        if self.occupancy.is_free(x_front):
+            rospy.loginfo("Navigator: Keep moving forwards")
+            V  = 0.06
+            om = 0.0
         cmd_vel = Twist()
         cmd_vel.linear.x = V
         cmd_vel.angular.z = om
         self.nav_vel_pub.publish(cmd_vel) 
-        #return 1 
 
     def check_neighbors(self,x_init,x_goal,dist):
         prob_list = []
@@ -553,12 +577,15 @@ class Navigator:
         #If not successful, keep trying to plan nearby
         ind = 0
         while not success:
-            rospy.loginfo("Planning failed")
             dist = ind*self.plan_resolution
+            rospy.loginfo("Planning failed searching distance " + str(dist) +" away from goal")
             #checks the neighbors and return the shortest path (making sure it's not too short)
             problem = self.check_neighbors(x_init,x_goal,dist) 
+            if ind > 10:
+                rospy.loginfo("too far. returning")
+                return
             if problem is None:
-                #no viable path. keep checking neighbors further out
+                rospy.loginfo("no viable path. keep checking neighbors further out")
                 ind+=1
                 continue
             else:
@@ -573,7 +600,16 @@ class Navigator:
         # Check whether path is too short
         if len(planned_path) < 4:    
             rospy.loginfo("Path too short to track")
-            self.switch_mode(Mode.PARK)
+            #force to move and replan
+            #time0 =  rospy.get_rostime()
+            #time = rospy.get_rostime()
+            #while time-time0 < rospy.Duration.from_sec(self.move_time):
+            #    time = rospy.get_rostime()
+            #    flag = self.force_move()
+            #    if flag == -1:
+            #         break
+            self.switch_mode(Mode.TRACK)
+            #self.switch_mode(Mode.PARK)
             return
 
         # Smooth and generate a trajectory
@@ -613,6 +649,7 @@ class Navigator:
         self.th_init = traj_new[0,2]
         self.heading_controller.load_goal(self.th_init)
 
+
         if not self.aligned():
             rospy.loginfo("Not aligned with start direction")
             self.switch_mode(Mode.ALIGN)
@@ -648,15 +685,19 @@ class Navigator:
                     self.stay_idle()
                     if self.has_stopped():
                         self.init_crossing()
+                        self.stop_flag = 0
                         break
             elif self.mode == Mode.CROSS:
                 # Crossing an intersection
                 while True:
-                    self.keep_moving()
+                    #self.keep_moving()
+                    self.force_control()
                     if self.has_crossed():
-                        self.keep_moving()
+                        #self.replan()
+                        self.force_control()
                         break
-                    self.replan()
+                self.switch_mode(Mode.TRACK)
+
             elif self.mode == Mode.ALIGN:
                 if self.aligned():
                     self.current_plan_start_time = rospy.get_rostime()
@@ -668,7 +709,8 @@ class Navigator:
                     if self.delivery_flag:
                         self.wait()
                         if len(self.delivery_req_list) != 0:
-                            self.x_g, self.y_g = self.objectname_markerLoc_dict[first_item]
+                            next_item = self.delivery_req_list.pop(0)
+                            self.x_g, self.y_g = self.objectname_markerLoc_dict[next_item]
                             self.theta_g = self.theta
                             self.replan()
                         #if we are finished with deliveries, go back home 
@@ -678,9 +720,9 @@ class Navigator:
                             self.theta_g  = 0.0
                             self.replan()
                             #self.delivery_flag = False
-                #elif not self.close_to_plan_start():
-                #    rospy.loginfo("replanning because far from start")
-                #    self.replan()
+                elif not self.close_to_plan_start():
+                    rospy.loginfo("replanning because far from start")
+                    self.replan()
                 elif (rospy.get_rostime() - self.current_plan_start_time).to_sec() > self.current_plan_duration:
                     rospy.loginfo("replanning because out of time")
                     self.replan() # we aren't near the goal but we thought we should have been, so replan

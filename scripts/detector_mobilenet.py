@@ -254,6 +254,9 @@ class Detector:
                 dist = self.estimate_distance(thetaleft,thetaright,img_laser_ranges)
 
                 if not self.object_publishers.has_key(cl):
+                    if self.object_labels[cl] == 'dog' or self.object_labels[cl] == 'cat':
+                        self.object_publishers[cl] = rospy.Publisher('/good/boy',
+                                                                     DetectedObject, queue_size=10)
                     self.object_publishers[cl] = rospy.Publisher('/detector/'+self.object_labels[cl],
                         DetectedObject, queue_size=10)
 
