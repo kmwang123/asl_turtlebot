@@ -62,6 +62,7 @@ class Navigator:
         self.wait_time  =  7.0
         self.waypoint_flag = 1
         self.vendor_ind = 0
+        self.intermediate_goal_flag = 0
 
         # current state
         self.x = 0.0
@@ -72,6 +73,10 @@ class Navigator:
         self.x_g = None
         self.y_g = None
         self.theta_g = None
+
+        # intermediate goal state
+        self.x_mid = None
+        self.y_mid = None
 
         # initial state
         self.x_init = rospy.get_param("~x_pos",3.15)
@@ -92,6 +97,8 @@ class Navigator:
         # plan parameters
         self.plan_resolution =  0.04
         self.plan_horizon = 4.0
+        self.state_min = self.snap_to_grid((-0.05,-0.05))
+        self.state_max = self.snap_to_grid((self.plan_horizon,self.plan_horizon))
 
         # time when we started following the plan
         self.current_plan_start_time = rospy.get_rostime()
@@ -330,7 +337,7 @@ class Navigator:
         # distance of the stop sign
         dist = msg.distance
 
-        # if close enough and in nav mode, stop
+        # if close enough and in track mode, stop
         if dist > 0 and dist < self.stop_min_dist and self.mode == Mode.TRACK:
             self.init_stop_sign()
 
@@ -358,6 +365,13 @@ class Navigator:
 
         return self.mode == Mode.CROSS and \
                rospy.get_rostime() - self.cross_start > rospy.Duration.from_sec(self.crossing_time)
+
+    def near_mid_goal(self):
+        """
+        returns whether the robot is close enough in position to the goal to
+        start using the pose controller
+        """
+        return linalg.norm(np.array([self.x-self.x_mid, self.y-self.y_mid])) < self.near_thresh
 
     def near_goal(self):
         """
@@ -472,6 +486,33 @@ class Navigator:
         self.nav_vel_pub.publish(cmd_vel) 
         #return 1 
 
+    def check_neighbors(self,x_init,x_goal,dist):
+        prob_list = []
+        #forward, back, left, right, UL, UR, LL,LR
+        neighbors = [self.snap_to_grid((self.x_g, self.y_g+dist)),
+                     self.snap_to_grid((self.x_g, self.y_g-dist)),
+                     self.snap_to_grid((self.x_g+dist, self.y_g)),
+                     self.snap_to_grid((self.x_g-dist, self.y_g)),
+                     self.snap_to_grid((self.x_g+dist, self.y_g+dist)),
+                     self.snap_to_grid((self.x_g+dist, self.y_g-dist)),
+                     self.snap_to_grid((self.x_g-dist, self.y_g+dist)),
+                     self.snap_to_grid((self.x_g-dist, self.y_g-dist))]
+        #check through all neighbors, appending valid paths that solve and are longer than a length of 4
+        for i in range(len(neighbors)):
+            new_x_goal = neighbors[i]
+            prob = AStar(self.state_min,self.state_max,x_init,new_x_goal,self.occupancy,self.plan_resolution)
+            if prob.solve():
+                if len(prob.path) > 4:
+                    prob_list.append(prob)
+        #go through all paths and pick shortest one. if none, then return none
+        if len(prob_list) == 0:
+            return None
+        path_lengths = np.zeros(len(prob_list))
+        for i in range(len(prob_list)):
+            path_lengths[i] = len(prob_list[i].path)
+        shortest_ind = np.argmin(path_lengths)
+        return prob_list[shortest_ind]
+            
     def replan(self):
         """
         loads goal into pose controller
@@ -492,8 +533,8 @@ class Navigator:
         # Attempt to plan a path
         #state_min = self.snap_to_grid((-self.plan_horizon, -self.plan_horizon))
         #state_max = self.snap_to_grid((self.plan_horizon, self.plan_horizon))
-        state_min = self.snap_to_grid((-0.05,-0.05))
-        state_max = self.snap_to_grid((self.plan_horizon,self.plan_horizon))
+        #state_min = self.snap_to_grid((-0.05,-0.05))
+        #state_max = self.snap_to_grid((self.plan_horizon,self.plan_horizon))
 
         x_init = self.snap_to_grid((self.x, self.y))
         self.plan_start = x_init
@@ -502,20 +543,28 @@ class Navigator:
         rospy.loginfo('In replan, x_init,y_init,th_init:' + str(x_init) + ', '+str(self.th_init))
         rospy.loginfo('In replan, x_goal and th_g is:' + str(x_goal) + ', '+str(self.theta_g))
 
-        problem = AStar(state_min,state_max,x_init,x_goal,self.occupancy,self.plan_resolution)
+        problem = AStar(self.state_min,self.state_max,x_init,x_goal,self.occupancy,self.plan_resolution)
 
         rospy.loginfo("Navigator: computing navigation plan")
         success =  problem.solve()
-        if not success:
+        #if not success:
+        #    rospy.loginfo("Planning failed")
+        #    return
+        #If not successful, keep trying to plan nearby
+        ind = 0
+        while not success:
             rospy.loginfo("Planning failed")
-            #time0 = rospy.get_rostime()
-            #time  = rospy.get_rostime()
-            #while time-time0  <  rospy.Duration.from_sec(self.move_time):
-            #    time = rospy.get_rostime() 
-            #    flag = self.keep_moving()
-            #    if flag == -1:
-            #         break
-            return
+            dist = ind*self.plan_resolution
+            #checks the neighbors and return the shortest path (making sure it's not too short)
+            problem = self.check_neighbors(x_init,x_goal,dist) 
+            if problem is None:
+                #no viable path. keep checking neighbors further out
+                ind+=1
+                continue
+            else:
+                #self.x_mid, self.y_mid = path[-1] 
+                #self.intermediate_goal_flag = 1
+                break
         rospy.loginfo("Planning Succeeded")
 
         planned_path = problem.path
@@ -549,9 +598,12 @@ class Navigator:
         self.publish_planned_path(planned_path, self.nav_planned_path_pub)
         self.publish_smoothed_path(traj_new, self.nav_smoothed_path_pub)
 
+        #if self.intermediate_goal_flag:
+        #    mid_x_loc = problem.path[-1]
+        #    self.pose_controller.load_goal(mid_x_loc[0],mid_x_loc[1],self.theta_g)
+        #else:
+        #    self.pose_controller.load_goal(self.x_g, self.y_g, self.theta_g)
         self.pose_controller.load_goal(self.x_g, self.y_g, self.theta_g)
-
-        print('pose_controller.load_goal:', self.x_g)
 
         self.traj_controller.load_traj(t_new, traj_new)
 
@@ -619,6 +671,13 @@ class Navigator:
                             self.x_g, self.y_g = self.objectname_markerLoc_dict[first_item]
                             self.theta_g = self.theta
                             self.replan()
+                        #if we are finished with deliveries, go back home 
+                        else:
+                            self.x_g = self.x_init
+                            self.y_g = self.y_init
+                            self.theta_g  = 0.0
+                            self.replan()
+                            #self.delivery_flag = False
                 #elif not self.close_to_plan_start():
                 #    rospy.loginfo("replanning because far from start")
                 #    self.replan()
