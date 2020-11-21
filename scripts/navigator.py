@@ -24,7 +24,7 @@ from asl_turtlebot.cfg import NavigatorConfig
 import waypoints
 import pdb
 
-NUM_WAYPOINTS = 2
+NUM_WAYPOINTS = 9
 
 # state machine modes, not all implemented
 class Mode(Enum):
@@ -59,7 +59,7 @@ class Navigator:
         #stop sign params
         self.stop_min_dist = 0.5
         self.stop_time = 3.
-        self.crossing_time = 1.
+        self.crossing_time = 1.5
         self.stop_flag = 0
 
         #force move params
@@ -100,7 +100,7 @@ class Navigator:
         self.map_threshold = 40 
 
         # plan parameters
-        self.plan_resolution =  0.04/2
+        self.plan_resolution =  0.04
         self.plan_horizon = 4.0
         self.state_min = self.snap_to_grid((-0.05,-0.05))
         self.state_max = self.snap_to_grid((self.plan_horizon,self.plan_horizon))
