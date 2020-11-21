@@ -24,7 +24,7 @@ from asl_turtlebot.cfg import NavigatorConfig
 import waypoints
 import pdb
 
-NUM_WAYPOINTS = 9
+NUM_WAYPOINTS = 2
 
 # state machine modes, not all implemented
 class Mode(Enum):
@@ -52,17 +52,19 @@ class Navigator:
         self.objectname_markerLoc_dict = {}
         self.delivery_flag = False
         self.delivery_done = False
+        self.NUM_DELIVERY_ITEMS = 0
+        self.home_flag = False
 
         #stop sign params
         self.stop_min_dist = 0.5
         self.stop_time = 3.
-        self.crossing_time = 8.
+        self.crossing_time = 1.
         self.stop_flag = 0
 
         #force move params
         self.move_time = 3.
-        self.wait_time  =  5.0
-        self.waypoint_flag = 1
+        self.wait_time  =  6.0
+        self.waypoint_flag = True
         self.vendor_ind = 0
         self.intermediate_goal_flag = 0
 
@@ -94,7 +96,7 @@ class Navigator:
         self.map_probs = []
         self.occupancy = None
         self.occupancy_updated = False
-        self.map_threshold = 50 
+        self.map_threshold = 40 
 
         # plan parameters
         self.plan_resolution =  0.04
@@ -108,10 +110,10 @@ class Navigator:
         self.plan_start = [0.,0.]
         
         # Robot limits
-        self.v_max = 0.21    # maximum velocity (orig is 0.2)
+        self.v_max = 0.1    # maximum velocity (orig is 0.2)
         self.om_max = 0.35   # maximum angular velocity (orig is 0.4)
 
-        self.v_des = 0.12   # desired cruising velocity
+        self.v_des = 0.06#0.12   # desired cruising velocity
         self.theta_start_thresh = 0.05   # threshold in theta to start moving forward when path-following
         self.start_pos_thresh = 0.2     # threshold to be far enough into the plan to recompute it
 
@@ -119,10 +121,11 @@ class Navigator:
         self.near_thresh = 0.2 #orig was 0.2
         self.at_thresh = 0.1 #orig  was 0.02
         self.at_thresh_theta = 0.05
+        self.near_delivery_thresh = 0.5 #orig was 0.2
 
         # trajectory smoothing
-        self.spline_alpha = 0.15
-        self.traj_dt = 0.1
+        self.spline_alpha = 0.09 #0.12
+        self.traj_dt = 0.1/2
 
         # trajectory tracking controller parameters
         self.kpx = 0.5 #orig was 0.5
@@ -170,14 +173,23 @@ class Navigator:
     def detected_obj_callback(self, msg):
         self.detected_objects_names = msg.objects
         self.detected_objects = msg.ob_msgs
-        #only create this dictionary once
-        if self.delivery_flag and len(self.objectname_markerLoc_dict) == 0:
-            for i in range(len(self.detected_objects_names)):
-                self.objectname_markerLoc_dict[self.detected_objects_names[i]] = self.marker_dict[i]
+        #update dictionary  as we get more objects
+        if self.NUM_DELIVERY_ITEMS != len(self.detected_objects_names):
+          self.NUM_DELIVERY_ITEMS = len(self.detected_objects_names)
+          for i in range(len(self.detected_objects_names)):
+            data = self.detected_objects[i]
+            dist = data.distance
+            #compute  location of food detected
+            th_diff = 0.5*(wrapToPi(data.thetaleft) - wrapToPi(data.thetaright))
+            th_center = wrapToPi(data.thetaleft) -  th_diff
+            th_loc = self.theta + th_center
+            food_loc_x  = self.x + dist*np.cos(th_loc)
+            food_loc_y  = self.y + dist*np.sin(th_loc)
+            LOCATIONS  =  (food_loc_x,food_loc_y)
+            self.objectname_markerLoc_dict[self.detected_objects_names[i]] = LOCATIONS #self.marker_dict[i]
 
     def delivery_callback(self, msg):
-        if msg.data in self.detected_objects_names:
-            self.delivery_flag = True
+        if msg.data not in ['go to waypoints','home']:#self.detected_objects_names:
             self.delivery_req_list = msg.data.split(',')
             first_item = self.delivery_req_list.pop(0)
             self.x_g, self.y_g = self.objectname_markerLoc_dict[first_item]
@@ -244,16 +256,7 @@ class Navigator:
             self.y_g = self.y_init
             self.theta_g  = 4.71
             self.replan()
-            self.waypoint_flag = 0
-
-    def deliver(self, object_name):
-        #find what index is associated with what object
-        #The markers are numbers as the robot sees it
-        #and the detected objects list is labeled as the  robot sees it
-        self.x_g, self.y_g = self.objectname_markerLoc_dict[object_name]  
-        self.theta_g = 0.0
-        self.replan()
-        
+            self.waypoint_flag = False
 
     def dyn_cfg_callback(self, config, level):
         rospy.loginfo("Reconfigure Request: k1:{k1}, k2:{k2}, k3:{k3}".format(**config))
@@ -382,6 +385,12 @@ class Navigator:
         start using the pose controller
         """
         return linalg.norm(np.array([self.x-self.x_g, self.y-self.y_g])) < self.near_thresh
+    def near_delivery_goal(self):
+        """
+        returns whether the robot is close enough in position to the goal to
+        start using the pose controller
+        """
+        return linalg.norm(np.array([self.x-self.x_g, self.y-self.y_g])) < self.near_delivery_thresh
 
     def at_goal(self):
         """
@@ -578,10 +587,11 @@ class Navigator:
         ind = 0
         while not success:
             dist = ind*self.plan_resolution
+            self.intermediate_goal_flag = True
             rospy.loginfo("Planning failed searching distance " + str(dist) +" away from goal")
             #checks the neighbors and return the shortest path (making sure it's not too short)
             problem = self.check_neighbors(x_init,x_goal,dist) 
-            if ind > 10:
+            if dist > 0.2: #ind > 10:
                 rospy.loginfo("too far. returning")
                 return
             if problem is None:
@@ -589,8 +599,9 @@ class Navigator:
                 ind+=1
                 continue
             else:
+                self.x_g, self.y_g = path[-1]
                 #self.x_mid, self.y_mid = path[-1] 
-                #self.intermediate_goal_flag = 1
+                self.intermediate_goal_flag = False
                 break
         rospy.loginfo("Planning Succeeded")
 
@@ -635,7 +646,6 @@ class Navigator:
         self.publish_smoothed_path(traj_new, self.nav_smoothed_path_pub)
 
         #if self.intermediate_goal_flag:
-        #    mid_x_loc = problem.path[-1]
         #    self.pose_controller.load_goal(mid_x_loc[0],mid_x_loc[1],self.theta_g)
         #else:
         #    self.pose_controller.load_goal(self.x_g, self.y_g, self.theta_g)
@@ -675,6 +685,9 @@ class Navigator:
                 print e
                 pass
 
+            if  self.intermediate_goal_flag:
+                self.wait()
+
             # STATE MACHINE LOGIC
             # some transitions handled by callbacks
             if self.mode == Mode.IDLE:
@@ -703,23 +716,10 @@ class Navigator:
                     self.current_plan_start_time = rospy.get_rostime()
                     self.switch_mode(Mode.TRACK)
             elif self.mode == Mode.TRACK:
-                if self.near_goal():
+                if self.near_delivery_goal and self.delivery_flag:
                     self.switch_mode(Mode.PARK)
-                    #if we are in delivery mode, wait a few seconds then move on to next delivery
-                    if self.delivery_flag:
-                        self.wait()
-                        if len(self.delivery_req_list) != 0:
-                            next_item = self.delivery_req_list.pop(0)
-                            self.x_g, self.y_g = self.objectname_markerLoc_dict[next_item]
-                            self.theta_g = self.theta
-                            self.replan()
-                        #if we are finished with deliveries, go back home 
-                        else:
-                            self.x_g = self.x_init
-                            self.y_g = self.y_init
-                            self.theta_g  = 0.0
-                            self.replan()
-                            #self.delivery_flag = False
+                elif self.near_goal() and not self.delivery_flag:
+                    self.switch_mode(Mode.PARK)
                 elif not self.close_to_plan_start():
                     rospy.loginfo("replanning because far from start")
                     self.replan()
@@ -727,20 +727,57 @@ class Navigator:
                     rospy.loginfo("replanning because out of time")
                     self.replan() # we aren't near the goal but we thought we should have been, so replan
             elif self.mode == Mode.PARK:
-                if self.at_goal():
+                if self.near_delivery_goal() and self.delivery_flag:
                     # forget about goal:
-                    self.x_g = None
-                    self.y_g = None
-                    self.theta_g = None
+                    #self.x_g = None
+                    #self.y_g = None
+                    #self.theta_g = None
+                    self.switch_mode(Mode.IDLE)
+                    self.wait()
+                    if len(self.delivery_req_list) != 0:
+                        next_item = self.delivery_req_list.pop(0)
+                        self.x_g, self.y_g = self.objectname_markerLoc_dict[next_item]
+                        self.theta_g = self.theta
+                        self.replan()
+                    else:
+                        self.x_g = self.x_init
+                        self.y_g = self.y_init
+                        self.theta_g  = 0.0
+                        self.home_flag = True
+                        self.replan()
+                if self.home_flag and self.at_goal():
+                    # forget about goal:
+                    #self.x_g = None
+                    #self.y_g = None
+                    #self.theta_g = None
+                    self.switch_mode(Mode.IDLE)
+                    if self.waypoint_flag:
+                        self.waypoint_flag = False
+                        self.delivery_flag = True
+                        self.home_flag = False
+                    
+                if self.at_goal() and self.waypoint_flag: #and not self.delivery_flag:
+                    # forget about goal:
+                    #self.x_g = None
+                    #self.y_g = None
+                    #self.theta_g = None
                     self.switch_mode(Mode.IDLE)
 
                     #when we are at goal, wait a few seconds and  move on to next waypoint
-                    if self.waypoint_flag:
-                         self.wait()
-                         if self.vendor_ind != NUM_WAYPOINTS:
-                             self.x_g, self.y_g, self.theta_g = waypoints.pose[self.vendor_ind]
-                             self.vendor_ind += 1
-                             self.replan()
+                    #if self.waypoint_flag:
+                    self.wait()
+                    if self.vendor_ind != NUM_WAYPOINTS:
+                         self.x_g, self.y_g, self.theta_g = waypoints.pose[self.vendor_ind]
+                         self.vendor_ind += 1
+                         self.replan()
+                    else:
+                         self.x_g = self.x_init
+                         self.y_g = self.y_init
+                         self.theta_g  = 0.0
+                         self.home_flag = True
+                         self.replan()
+                     
+
 
             self.publish_control()
 

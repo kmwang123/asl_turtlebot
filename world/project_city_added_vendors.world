@@ -1695,7 +1695,7 @@
     </model>
 
  
-     <model name='Dog'>
+    <model name='Dog'>
       <link name='plate'>
         <pose>0 0 0.2425 0 0 0</pose>
         <collision name='collision'>
@@ -1724,7 +1724,7 @@
         <visual name='visual'>
           <geometry>
             <box>
-              <size>0.001 0.2 0.13</size>
+              <size>0.001 0.4 0.26</size>
             </box>
           </geometry>
           <material>
@@ -1861,7 +1861,7 @@
         <child>plate</child>
         <pose>0 0 0.1 0 0 0</pose>
       </joint>
-      <pose frame=''>3.7 0.2 0.01 0.0 0.0 3.1415</pose>
+      <pose frame=''>3.55 0.2 0.01 0.0 0.0 3.1415</pose>
     </model>
 
 

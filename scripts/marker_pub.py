@@ -46,6 +46,7 @@ class MarkerPublisher:
         rospy.Subscriber('/detector/broccoli', DetectedObject, self.object_callback)
         rospy.Subscriber('/detector/cake', DetectedObject, self.object_callback)
         rospy.Subscriber('/detector/hot_dog', DetectedObject, self.object_callback)
+        rospy.Subscriber('/detector/dog', DetectedObject, self.object_callback)
 
     def object_callback(self, data):
         #when an  object is detected, we compute the location of the object and  store it
@@ -103,7 +104,10 @@ class MarkerPublisher:
             marker2.color.r = 0.0
             marker2.color.g = 0.0
             marker2.color.b = 0.0
-            marker2.text = data.name
+            if data.name == "dog":
+                marker2.text = "good boy"
+            else:
+                marker2.text = data.name
             self.marker_info2[data.name] =  marker2
 
             self.markerID += 1
