@@ -202,57 +202,6 @@ class Navigator:
             self.x_g, self.y_g, self.theta_g = waypoints.pose[self.vendor_ind]
             self.replan()
             #self.switch_mode(Mode.TRACK)            
-          
-        elif msg.data in ['waypoint1']:
-            self.x_g = 3.327
-            self.y_g = 2.373 
-            self.theta_g = np.pi/2.0
-            self.replan()
-        elif msg.data in ['waypoint2']: 
-            self.x_g = 2.9 #3.2 
-            self.y_g = 2.76
-            self.theta_g = -np.pi
-            self.replan()
-        elif msg.data in ['waypoint3']:
-            self.x_g = 1.8 
-            self.y_g = 2.8
-            self.theta_g = -np.pi #-np.pi
-            self.replan() 
-        elif msg.data in ['waypoint4']:
-            self.x_g = 0.642
-            self.y_g = 2.72
-            self.theta_g = -1.86
-            self.replan()
-        elif msg.data in ['waypoint5']:
-            self.x_g = 0.25
-            self.y_g = 1.63
-            self.theta_g = 0.0
-            self.replan()
-        elif msg.data in ['waypoint6']:
-            self.x_g = 1.0
-            self.y_g = 1.63
-            self.theta_g = 0.0
-            self.replan()
-        elif msg.data in ['waypoint7']:
-            self.x_g = 2.01
-            self.y_g = 1.65
-            self.theta_g = 0.0
-            self.replan()
-        elif msg.data in ['waypoint8']:
-            self.x_g = 2.31
-            self.y_g = 1.33
-            self.theta_g = -np.pi/2
-            self.replan()
-        elif msg.data in ['waypoint9']:
-            self.x_g = 2.07
-            self.y_g = 0.36
-            self.theta_g = -np.pi
-            self.replan()
-        elif msg.data in ['waypoint10']:
-            self.x_g = 1.21
-            self.y_g = 0.2
-            self.theta_g = -np.pi
-            self.replan()
         elif msg.data in ['home']:
             self.x_g = self.x_init
             self.y_g = self.y_init
